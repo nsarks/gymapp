@@ -1,0 +1,15 @@
+{
+  "name": "gymapp",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/script.test.mjs test/logic.test.mjs",
+    "test:e2e": "node test/e2e.mjs"
+  },
+  "dependencies": { "preact": "^10.24.0" },
+  "devDependencies": { "@preact/preset-vite": "^2.9.0", "vite": "^5.4.0", "puppeteer-core": "^23.0.0" }
+}
