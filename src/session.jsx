@@ -2,10 +2,11 @@ import { useEffect, useState } from 'preact/hooks';
 import {
   S, useStore, view, draftOf, setDraft, logSet, editSet, timerAdd, timerClear, skipItem, skipLegs, lowerBodyLeft, unskip,
   swapItem, addItem, addToLibrary, moveItem, goTo, setItemNote, setInjury, unloggedMain, finishSession, isComplete, isLogged,
-  itemGroup, lastFor, saveSummaryNote, syncNow, syncLabel,
+  itemGroup, lastFor, saveSummaryNote, syncNow, syncLabel, finishItem, deleteItem,
 } from './store.js';
+import { describe } from './descriptions.js';
 import { Icon, Tag, Sheet, Chips, Stepper, SyncBadge, useTick } from './ui.jsx';
-import { fmtSet, fmtKg, niceDate, GROUPS, sameName, groupOf, fmtDuration, sessionStats } from './logic.js';
+import { fmtSet, fmtKg, niceDate, GROUPS, GROUP_COLOURS, sameName, groupOf, fmtDuration, sessionStats } from './logic.js';
 
 const SKIP_REASONS = ['Machine busy', 'Injury or niggle', 'Short on time', 'Not feeling it', 'Other'];
 const SWAP_REASONS = ['Machine busy', 'No equipment', 'Injury or niggle', 'Prefer this', 'Other'];
@@ -136,6 +137,19 @@ export function EditSet({ set, onSave, onRemove, onClose }) {
   );
 }
 
+export function Description({ name }) {
+  const [open, setOpen] = useState(false);
+  const text = describe(name);
+  if (!text) return null;
+  const long = text.length > 110;
+  return (
+    <div class="desc">
+      <p class={open || !long ? '' : 'clamp'}>{text}</p>
+      {long && <button class="more" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? 'Show less' : 'Show more'}</button>}
+    </div>
+  );
+}
+
 function ExerciseCard({ it, index, count }) {
   const [open, setOpen] = useState(false);
   const [rpeOpen, setRpeOpen] = useState(false);
@@ -146,9 +160,13 @@ function ExerciseCard({ it, index, count }) {
   const upcoming = Math.max(0, (it.target || 0) - it.sets.length - 1);
   const unit = /\d\s*s(ec|\b)/i.test(it.reps) ? 'secs' : 'reps'; // timed holds such as "30s"
   return (
-    <section class="card exercise">
-      <p class="muted small">Exercise {index + 1} of {count}{it.block === 'Warm-up' ? ', warm-up' : ''}</p>
+    <section class="card exercise" style={{ '--g': GROUP_COLOURS[itemGroup(it)] || GROUP_COLOURS.Other }}>
+      <div class="band">
+        <span>Exercise {index + 1} of {count}{it.block === 'Warm-up' ? ', warm-up' : ''}</span>
+        <span class="gchip">{itemGroup(it)}</span>
+      </div>
       <h1>{it.exercise}</h1>
+      <Description name={it.exercise} />
       <div class="row wrap gap">
         {it.kind === 'swapped' && <Tag kind="swapped" text={`Swapped from ${it.planned}`} />}
         {it.kind === 'added' && <Tag kind="added" />}
@@ -162,7 +180,7 @@ function ExerciseCard({ it, index, count }) {
         <div class="details">
           {it.tempo && <p><span class="muted">Tempo</span> {it.tempo}</p>}
           {it.rest && <p><span class="muted">Rest</span> {it.rest}</p>}
-          {it.cue && <p><span class="muted">Chloe's note</span> {it.cue}</p>}
+          {it.cue && <p><span class="muted">Note from the sheet</span> {it.cue}</p>}
           <p><span class="muted">Last time</span> {last ? `${last.sets.map(fmtSet).join(', ')} (${niceDate(last.date)})` : 'No record yet'}</p>
           {it.note && <p><span class="muted">Your note</span> {it.note}</p>}
         </div>
@@ -236,6 +254,7 @@ export function Session({ go }) {
           <strong>{s.name}</strong>
           <div class="row gap"><SyncBadge />{s.injury && <Tag kind="injury" />}</div>
         </div>
+        <button class="chip finishbtn" onClick={finish}>Finish</button>
         <button class="iconbtn" onClick={() => setSheet('session')} aria-label="Session menu"><Icon name="dots" /></button>
       </header>
 
@@ -257,8 +276,8 @@ export function Session({ go }) {
         <ExerciseCard key={it.key} it={it} index={s.cur} count={s.items.length} />
       ) : (
         <section class="card">
-          <h1>Build your own</h1>
-          <p class="muted">Start with an empty session and add what you do.</p>
+          <h1>{s.freestyle ? 'Build your own' : 'No exercises left'}</h1>
+          <p class="muted">{s.freestyle ? 'Start with an empty session and add what you do.' : 'Add an exercise, or finish the session.'}</p>
           <button class="btn" onClick={() => setSheet('add')}>Add an exercise</button>
         </section>
       )}
@@ -289,9 +308,11 @@ export function Session({ go }) {
           <div class="list">
             {!isLogged(it) && <button class="listrow" onClick={() => setSheet('skip')}><Icon name="skip" />Skip</button>}
             {!isLogged(it) && <button class="listrow" onClick={() => setSheet('swap')}><Icon name="swap" />Swap</button>}
+            {it.sets.length > 0 && !isComplete(it) && <button class="listrow" onClick={() => { finishItem(it.key); close(); }}><Icon name="check" />Finish exercise ({it.sets.length} {it.sets.length === 1 ? 'set' : 'sets'} logged)</button>}
             <button class="listrow" onClick={() => { setNote(it.note || ''); setSheet('note'); }}><Icon name="note" />Add note</button>
             <button class="listrow" disabled={s.cur === 0} onClick={() => moveItem(it.key, -1)}><Icon name="up" />Move up</button>
             <button class="listrow" disabled={s.cur === s.items.length - 1} onClick={() => moveItem(it.key, 1)}><Icon name="down" />Move down</button>
+            <button class="listrow danger" onClick={() => { deleteItem(it.key); close(); }}><Icon name="close" />Delete exercise{it.sets.length ? ' and its sets' : ''}</button>
           </div>
         </Sheet>
       )}

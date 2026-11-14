@@ -57,7 +57,19 @@ await click('Skip warm-up');
 await click('Start session');
 assert.match(await text(), /DB Bench Press/);
 assert.match(await text(), /3 x 8-10/);
+assert.match(await text(), /Lie on a flat bench with a dumbbell/); // description shown
+assert.match(await text(), /Show more/);
+await click('Show more');
+assert.match(await text(), /Show less/);
 await shot('03-card');
+
+// Delete an exercise (and undo), then finish one early.
+await click('Exercise options');
+await click('Delete exercise');
+assert.match(await text(), /Removed DB Bench Press\./);
+assert.match(await text(), /Chest supported - DB row/);
+await click('Undo');
+assert.match(await text(), /DB Bench Press/);
 
 // Exercise 1: three sets, typed weight, same as last set, edit.
 await click('kg: 0. Tap to type');
@@ -76,6 +88,7 @@ await click('Dismiss');
 await page.setOfflineMode(true);
 await click('Next exercise');
 assert.match(await text(), /Chest supported - DB row/);
+assert.match(await text(), /Exercise 2 of 6/);
 await click('Exercise options');
 await click('Swap');
 await shot('05-swap');
@@ -99,6 +112,14 @@ await click('Skip');
 await click('Machine busy');
 await sleep(100);
 assert.match(await text(), /Lat Pull down/);
+await click('Log set 1');
+await click('Exercise options');
+await click('Finish exercise');
+assert.match(await text(), /Exercise finished\./);
+assert.match(await text(), /Facepulls/);
+await click('Exercise options');
+await click('Delete exercise');
+assert.match(await text(), /Hammer curl/);
 
 // Add a leg exercise, then skip legs in one tap.
 await click('Session menu');
@@ -113,7 +134,7 @@ await page.type('.overlay input.text', 'felt sharp on step up');
 await click('Save');
 await click('Session menu');
 await click('Finish session');
-assert.match(await text(), /4 exercises not logged/);
+assert.match(await text(), /2 exercises not logged/);
 await shot('06-finish');
 await click('Short on time');
 await sleep(200);
@@ -135,7 +156,9 @@ assert.equal(b.log.filter((r) => r.Exercise === 'DB Bench Press').length, 3);
 assert.deepEqual(b.log.filter((r) => r.Exercise === 'DB Bench Press').map((r) => r.Kg), [25, 27.5, 27.5]);
 const sw = b.log.find((r) => r.Exercise === 'Machine row');
 assert.deepEqual([sw.Status, sw.PlannedExercise], ['swapped', 'Chest supported - DB row']);
-assert.equal(b.log.filter((r) => r.Status === 'skipped').length, 5);
+assert.equal(b.log.filter((r) => r.Status === 'skipped').length, 3);
+assert.equal(b.log.filter((r) => r.Exercise === 'Lat Pull down').length, 1);
+assert.equal(b.log.filter((r) => r.Exercise === 'Facepulls').length, 0, 'deleted exercise left nothing behind');
 assert.equal(b.log.find((r) => r.Exercise === 'Incline Bench press').Note, 'Machine busy');
 assert.equal(b.sessions.length, 1);
 assert.deepEqual([b.sessions[0].Mode, b.sessions[0].Injury, b.sessions[0].Note], ['modified', true, 'Knee: felt sharp on step up']);
@@ -156,6 +179,27 @@ await click('Gym day 1');
 assert.match(await text(), /Instead of Chest supported - DB row/);
 await shot('09-detail');
 await click('Close');
+const before2 = log().sessions.length;
+// make a throwaway session, then delete it from history
+await click('Today');
+await click('Change session');
+await click('Freestyle session');
+await click('Add an exercise');
+await click('DB Bench Press');
+await click('Log set 1');
+await click('Finish');
+await click('Done');
+await click('History');
+await click('Freestyle');
+await click('Delete this session');
+assert.match(await text(), /Session deleted\./);
+await sleep(6500);
+await click('Settings');
+await click('Force sync');
+await sleep(600);
+assert.equal(log().sessions.length, before2, 'deleted session is gone from the sheet');
+assert.equal(log().log.filter((r) => r.Exercise === 'DB Bench Press').length, 3);
+await click('History');
 await click('Exercise');
 assert.match(await text(), /One session in this range/);
 await shot('10-exercise');
@@ -224,13 +268,15 @@ await page.evaluate(() => new Promise((res) => {
   rq.onsuccess = () => {
     const tx = rq.result.transaction('kv', 'readwrite'); const st = tx.objectStore('kv'); const get = st.get('active');
     get.onsuccess = () => { const a = get.result; a.start = new Date(Date.now() - 13 * 3600e3).toISOString(); st.put(a, 'active'); };
-    tx.oncomplete = res;
+    tx.oncomplete = () => { rq.result.close(); res(); };
   };
 }));
 // Opens with no signal (service worker shell) and offers Finish or Discard.
 await page.setOfflineMode(true);
 await page.reload({ waitUntil: 'domcontentloaded' });
 await sleep(500);
+try { await page.waitForFunction(() => document.body.innerText.length > 20, { timeout: 8000, polling: 200 }); }
+catch (e) { console.log('DIAG', JSON.stringify(errors), JSON.stringify(await page.evaluate(async () => ({ sw: !!navigator.serviceWorker.controller, scripts: [...document.scripts].map((x) => x.src), app: document.getElementById('app').innerHTML.length, idb: await new Promise((r) => { const t = setTimeout(() => r('open hung'), 3000); const q = indexedDB.open('gymlog', 1); q.onblocked = () => r('blocked'); q.onsuccess = () => { clearTimeout(t); const g = q.result.transaction('kv').objectStore('kv').get('settings'); g.onsuccess = () => { r('ok ' + !!g.result); q.result.close(); }; }; q.onerror = () => r('err'); }), perf: performance.getEntriesByType('resource').map((r) => r.name.replace(location.origin, '') + ' ' + Math.round(r.duration)) })))); throw e; }
 assert.match(await text(), /Finish yesterday's session\?/);
 await shot('15-stale-offline');
 await click('Discard');

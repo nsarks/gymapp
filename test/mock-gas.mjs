@@ -17,6 +17,18 @@ class Range {
     }
     return out;
   }
+  getDisplayValues() {
+    return this.getValues().map((row, i) => row.map((v, j) => {
+      const d = this.sheet.display[`${this.r + i},${this.c + j}`];
+      if (d !== undefined) return d;
+      if (v instanceof Date) return v.toDateString();
+      return v === '' || v == null ? '' : String(v);
+    }));
+  }
+  clearContent() {
+    for (let i = 0; i < this.nr; i++) for (let j = 0; j < this.nc; j++) { const g = this.sheet.grid[this.r - 1 + i]; if (g) g[this.c - 1 + j] = ''; }
+    return this;
+  }
   setValues(vals) {
     if (this.dummy) throw new Error('setValues on a column range');
     this.sheet.writes++;
@@ -41,7 +53,7 @@ class Range {
 }
 
 class Sheet {
-  constructor(name, grid = [], merges = []) { this.name = name; this.grid = grid; this.merges = merges; this.writes = 0; }
+  constructor(name, grid = [], merges = []) { this.name = name; this.grid = grid; this.merges = merges; this.writes = 0; this.display = {}; }
   getName() { return this.name; }
   getLastRow() {
     for (let r = this.grid.length; r > 0; r--) if ((this.grid[r - 1] || []).some((v) => v !== '' && v != null)) return r;
@@ -76,9 +88,16 @@ class Book {
 }
 
 const hdr = ['DATE ', 'EXERCISE ', 'REPS ', 'SETS', 'DURATION', 'TEMPO', 'REST', 'RPE (/10)', 'COMMENTS', 'COMPLETE'];
-const tab = (name, title, rows, merges = []) => new Sheet(name,
+const D = (s) => ({ date: s });
+const tab = (name, title, rows, merges = []) => {
+  const sh = new Sheet(name,
   [[title, '', '', '', '', '', '', '', '', ''], hdr.slice(), ...rows.map((r) => ['', ...r, '']), ['', '', '', '', '', '', '', '', '', '']],
   [[1, 1, 1, 10], ...merges]);
+  sh.grid.forEach((row, r) => row.forEach((v, c) => {
+    if (v && v.date) { row[c] = new Date('2026-12-10T00:00:00Z'); sh.display[`${r + 1},${c + 1}`] = v.date; }
+  }));
+  return sh;
+};
 
 // A copy of the layout of Chloe's sheet, including merged cells and the mistyped Friday heading.
 export function fixtureBook() {
@@ -97,7 +116,17 @@ export function fixtureBook() {
       ['Incline Bench press', '10-12', 3, '/', '2/0/2', '2min', '', '17.5kgx12  x5  // 15kg x7  x12'],
       ['Lat Pull down ', '12-15', 3, '/', '2/0/2', '2min', '', '60kgx15 // 75kgx12 x15'],
       ['Facepulls ', 15, 2, '/', '4/2/1', '1min', '', '25kg X12X3'],
-      ['Hammer curl ', '10-12', 2, '/', '2/0/2', '1min', '', 'All in the biceps!!! 5kgsx12'],
+      ['Hammer curl ', D('10-12'), 2, '/', '2/0/2', '1min', '', 'All in the biceps!!! 5kgsx12'],
+      ['', '', '', '', '', '', '', ''],
+      ['bar bench press', 8, 3, '/', '2/0/2', '2min', '', 60],
+      ['hammer ', 12, 1, '/', '2/0/2', '1min', '', 10],
+      ['', '', '', '', '', '', '', ''],
+      ['DB Bench Press', '8-10', 3, '/', '2/0/2', '2min', '', ''],
+      ['Chest supported - DB row', '8-12', 3, '/', '2/0/2', '2min', '', ''],
+      ['Incline Bench press', '8-12', 3, '/', '2/0/2', '2min', '', ''],
+      ['Lat Pull down ', '8-12', 3, '/', '2/0/2', '2min', '', ''],
+      ['Facepulls ', '12-15', D('2-3'), '/', '4/2/1', '1min', '', ''],
+      ['Hammer curl ', D('10-12'), 2, '/', '2/0/2', '1min', '', ''],
     ], [[3, 4, 2, 1]]),
     tab('Tuesday (Home)', 'Tuesday - HOME WORKOUT A', [
       ['Sit-to-stand ', '8-10', 3, '/', '2/0/2', '20-30s', '', 'CONTROL '],
@@ -120,7 +149,14 @@ export function fixtureBook() {
       ['Chest press - Fixed machine', '10-12', 3, '/', 'Medium', '1-2mins', '', '50kg x12x3'],
       ['Lat pull down', '12-15', 3, '/', 'Medium', '1-2mins', '', '70kg x15x3'],
       ['Facepulls ', 15, 2, '/', 'Medium', '1min', '', '41kg x15x2'],
-      ['Cable - Bicep curl ', '10-12', 2, '/', 'Medium', '1min', '', '13.7kg x12x3'],
+      ['Cable - Bicep curl ', D('10-12'), 2, '/', 'Medium', '1min', '', '13.7kg x12x3'],
+      ['', '', '', '', '', '', '', ''],
+      ['Incline bench press', '8-10', 3, '/', '2/0/2', '2min', '', '18*2+20*1'],
+      ['Bent over row OR Cable row', '8-12', 3, '/', '2/0/2', '2min', '', '40.0'],
+      ['Chest press - Fixed machine', '8-12', 3, '/', '2/0/2', '2min', '', '52.0'],
+      ['Lat pull down', '8-12', 3, '/', '2/0/2', '2min', '', 'struggled with hip pain'],
+      ['Facepulls ', '12-15', D('2-3'), '/', '4/2/1', '1min', '', '41*3*15'],
+      ['Cable - Bicep curl ', D('10-12'), 2, '/', '2/0/2', '1min', '', 'done'],
       ['Remember to stretch after', '', '', '', '', '', '', ''],
     ]),
     tab('Saturday (Home)', 'Saturday - HOME WORKOUT B', [
@@ -156,7 +192,7 @@ export function loadScript(book) {
   };
   vm.createContext(sandbox);
   const src = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
-  vm.runInContext(src + '\nthis.api = { doPost, setup, appSheet_, readRows_, book_ };', sandbox);
+  vm.runInContext(src + '\nthis.api = { doPost, setup, reseedPlan, appSheet_, readRows_, book_ };', sandbox);
   const post = (body) => JSON.parse(sandbox.api.doPost({ postData: { contents: typeof body === 'string' ? body : JSON.stringify(body) } }).text);
   return { api: sandbox.api, post, logs, props, book };
 }

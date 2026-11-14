@@ -1,5 +1,5 @@
 // App shell cache. The shell opens from cache straight away and refreshes itself in the background.
-const CACHE = 'gymlog-shell-v1';
+const CACHE = 'gymlog-shell-v2';
 
 async function refreshShell() {
   const cache = await caches.open(CACHE);
@@ -9,10 +9,16 @@ async function refreshShell() {
   const urls = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]).filter((u) => !/^(https?:|data:)/.test(u));
   await Promise.all(urls.map(async (u) => { if (!(await cache.match(u))) await cache.add(u).catch(() => {}); }));
   await cache.put('./index.html', res);
+  // Drop files from older versions so the cache does not keep growing.
+  const keep = new Set([...urls, './index.html'].map((u) => new URL(u, self.registration.scope).href));
+  for (const req of await cache.keys()) if (!keep.has(req.url)) await cache.delete(req);
 }
 
 self.addEventListener('install', (e) => e.waitUntil(refreshShell().then(() => self.skipWaiting())));
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+  await self.clients.claim();
+})()));
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
