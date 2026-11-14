@@ -94,6 +94,11 @@ function appSheet_(ss, name) {
   return sheet;
 }
 
+// Some sheets (copies made through Drive, for one) report no time zone.
+function timeZone_(ss) {
+  return ss.getSpreadsheetTimeZone() || Session.getScriptTimeZone() || 'Europe/London';
+}
+
 function isoDate_(v, tz) {
   if (v instanceof Date) return Utilities.formatDate(v, tz, 'yyyy-MM-dd');
   return String(v == null ? '' : v).slice(0, 10);
@@ -110,7 +115,7 @@ function readRows_(ss, name) {
   const head = HEADERS[name];
   const last = sheet.getLastRow();
   if (last < 2) return [];
-  const tz = ss.getSpreadsheetTimeZone();
+  const tz = timeZone_(ss);
   const values = sheet.getRange(2, 1, last - 1, head.length).getValues();
   const rows = [];
   values.forEach(function (r) {
@@ -147,7 +152,7 @@ function toRow_(name, obj) {
 
 function bootstrap_() {
   const ss = book_();
-  const tz = ss.getSpreadsheetTimeZone();
+  const tz = timeZone_(ss);
   const plan = readRows_(ss, 'AppPlan');
   const planDays = readRows_(ss, 'PlanDays');
   const library = readRows_(ss, 'Library');

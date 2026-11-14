@@ -66,7 +66,7 @@ class Sheet {
 class Book {
   constructor(sheets) { this.sheets = sheets; }
   getSheets() { return this.sheets.slice(); }
-  getSpreadsheetTimeZone() { return 'UTC'; }
+  getSpreadsheetTimeZone() { return null; }
   insertSheet(name) {
     if (this.sheets.some((s) => s.name.toLowerCase() === name.toLowerCase())) throw new Error('A sheet with the name "' + name + '" already exists.');
     const s = new Sheet(name);
@@ -142,11 +142,12 @@ export function loadScript(book) {
     console, JSON, Date, Math, Object, Array, String, Number, isFinite,
     SpreadsheetApp: { openById: () => book },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
+    Session: { getScriptTimeZone: () => 'UTC' },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Logger: { log: (m) => logs.push(m) },
     Utilities: {
       getUuid: () => `0000${uuid++}-aaaa-bbbb-cccc-dddddddddddd`,
-      formatDate: (d, tz, f) => f === 'u' ? String(d.getUTCDay() || 7) : `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`,
+      formatDate: (d, tz, f) => { if (typeof tz !== 'string') throw new Error('Invalid argument: timeZone'); return f === 'u' ? String(d.getUTCDay() || 7) : `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; },
     },
     ContentService: {
       MimeType: { JSON: 'json' },
