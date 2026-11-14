@@ -48,6 +48,11 @@ test('setup leaves the original tabs untouched and seeds the plan', () => {
   const lib = table(g.book, 'Library').slice(1);
   assert.equal(new Set(lib.map((r) => r[0].toLowerCase())).size, lib.length);
   assert.equal(lib.find((r) => r[0] === 'Clamshell')[1], 'Glutes');
+  const grp = (n) => lib.find((r) => r[0] === n)[1];
+  assert.equal(grp('Chest press - Fixed machine'), 'Chest');
+  assert.equal(grp('SL Balance'), 'Core');
+  assert.equal(grp('Single-leg balance'), 'Core');
+  assert.equal(grp('Cable - Bicep curl'), 'Arms');
 });
 
 test('setup is safe to run twice and shows the key once', () => {

@@ -402,12 +402,13 @@ function readSourceTab_(sheet) {
 
 function guessGroup_(name) {
   const n = name.toLowerCase();
+  if (/balance|plank/.test(n)) return 'Core';
   if (/face\s*pull|shoulder|lateral|overhead|arm circle|rear delt/.test(n)) return 'Shoulders';
   if (/squat|sit.to.stand|lunge|calf|leg|hamstr|hamtr|bulgarian|step|deadlift|ankle|knee/.test(n)) return 'Legs';
   if (/glute|clam|hip thrust|bridge/.test(n)) return 'Glutes';
   if (/pall?of|pull\s*off/.test(n)) return 'Core';
   if (/curl|tricep|dip|pushdown|skull/.test(n)) return 'Arms';
-  if (/row|pull|lat\b|chin/.test(n)) return 'Back';
+  if (/row|pull|lat\b|\bchin/.test(n)) return 'Back';
   if (/bench|chest|press|push.?up|fly/.test(n)) return 'Chest';
   if (/plank|balance|crunch|core|dead bug|sit.?up/.test(n)) return 'Core';
   return 'Other';
