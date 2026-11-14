@@ -35,6 +35,10 @@ Push this folder to the `main` branch of the repository. In the repository: Sett
 
 Open the address in Chrome on Android, menu, Add to Home screen (Install app). Open it, go to Settings, paste the script URL and the key, and press Save and connect.
 
+## When Chloe updates the plan
+
+Each of her day tabs can hold several blocks separated by blank rows. The app uses the **last block** in each tab as the current plan, and keeps the most recent written comment for each exercise as its note. After she changes the plan, open the Apps Script project, choose `reseedPlan` and press Run. It rebuilds `AppPlan`, `PlanDays` and the plan part of `Library`; `Log`, `Sessions` and `Progress` are not touched.
+
 ## Decisions made during the build
 
 The spec said to pick the simpler option and note it.
@@ -43,9 +47,12 @@ The spec said to pick the simpler option and note it.
 - **Warm-up rows are repeated for each day in `AppPlan`** (Block = Warm-up), so each day can be edited on its own.
 - **Timed holds** (reps shown as "/" with a duration, such as Side plank 30s) keep the duration in the Reps column, and the app counts seconds for them.
 - **Sets written as a range** ("2-3") use the upper number for the rows shown. Rest written as a range ("1-2mins", "20-30s") uses the upper value for the timer; it can be dismissed early.
-- **Two extra sync operations**, `log.delete` and `session.delete`, so undo, removing a mistaken set and discarding an abandoned session can reach the sheet.
+- **Two extra sync operations**, `log.delete` and `session.delete`, so undo, deleting an exercise or session, removing a mistaken set and discarding an abandoned session reach the sheet.
+- **Sheet cells are read as displayed.** Some of Chloe's cells that show "10-12" are stored as dates (formatted d-m), so the script reads the displayed text.
+- **Exercise descriptions live in the app** (`src/descriptions.js`), written once in plain English. New exercises without a match show no description.
+- **Undo holds sync for five seconds**, so undo is an exact restore.
 - **Bootstrap also returns the full Log and Sessions rows**, so history works on a new phone.
-- **Swap and skip are offered only before any set is logged** for that exercise. After that, use Add an exercise.
+- **Swap and skip are offered only before any set is logged** for that exercise. After that, use Finish exercise or Delete exercise.
 - **Swap is one tap on a suggestion.** Pick the optional reason chip first; there is no separate Swap button.
 - **Long-press on + or -** shows the other step sizes (1.25 and 5 for kg).
 - **Reps default to the top of the target range; kg defaults to last time.**

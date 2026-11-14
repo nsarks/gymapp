@@ -45,7 +45,12 @@ let viewCache = null;
 export function emit() { S.v++; viewCache = null; subs.forEach((f) => f()); }
 export function useStore() {
   const [, set] = useState(0);
-  useEffect(() => { const f = () => set((x) => x + 1); subs.add(f); return () => subs.delete(f); }, []);
+  useEffect(() => {
+    const f = () => set((x) => x + 1);
+    subs.add(f);
+    f(); // catch any change that landed between the first render and subscribing (start-up race)
+    return () => subs.delete(f);
+  }, []);
   return S;
 }
 const save = (...keys) => keys.forEach((k) => kvSet(k, S[k]).catch(() => {}));
@@ -95,12 +100,14 @@ async function api(body) {
 }
 
 let timer = null, running = null, fails = 0;
+let holdUntil = 0, inAction = false; // nothing is sent while an undo is on offer
 const inflight = new Set();
 export function scheduleSync(ms = 6000) { clearTimeout(timer); timer = setTimeout(syncNow, ms); }
 
 export function syncNow() {
   if (running) return running;
   if (!S.settings.url || !S.queue.length) return Promise.resolve();
+  if (Date.now() < holdUntil) { scheduleSync(holdUntil - Date.now() + 200); return Promise.resolve(); }
   clearTimeout(timer);
   running = (async () => {
     S.sync = { ...S.sync, state: 'syncing' }; emit();
@@ -173,11 +180,11 @@ export const syncLabel = () => {
 
 function enqueue(op, row) {
   // Fold an edit into a write that has not been sent yet.
-  const idField = op.startsWith('log.') ? 'ClientID' : op.startsWith('session.') ? 'SessionID' : null;
-  if (idField && (op === 'log.update' || op === 'session.upsert')) {
-    const q = S.queue.find((o) => !inflight.has(o.id) && o.row[idField] === row[idField] && (o.op === op || o.op === 'log.append'));
-    if (q) { q.row = row; save('queue'); scheduleSync(); return q.id; }
-  }
+  if (!inAction && S.undo) { S.undo = null; holdUntil = 0; } // a new action ends the undo offer
+  let q = null;
+  if (op === 'log.update') q = S.queue.find((o) => !inflight.has(o.id) && (o.op === 'log.append' || o.op === 'log.update') && o.row.ClientID === row.ClientID);
+  if (op === 'session.upsert') q = S.queue.find((o) => !inflight.has(o.id) && o.op === 'session.upsert' && o.row.SessionID === row.SessionID);
+  if (q) { q.row = row; save('queue'); scheduleSync(); return q.id; }
   const o = { id: uuid(), op, row };
   S.queue.push(o);
   save('queue');
@@ -185,46 +192,40 @@ function enqueue(op, row) {
   return o.id;
 }
 
-// Runs an action and offers a 5 second undo for it.
+// Runs an action and offers a 5 second undo for it. Sync is held until the offer ends, so undo is a plain restore.
 function undoable(label, fn) {
-  const snap = JSON.stringify(S.active);
-  const before = new Set(S.queue.map((o) => o.id));
-  const queuedRows = JSON.stringify(S.queue);
-  fn();
-  const added = S.queue.filter((o) => !before.has(o.id));
+  const snapActive = JSON.stringify(S.active);
+  const snapQueue = JSON.stringify(S.queue);
+  inAction = true;
+  try { fn(); } finally { inAction = false; }
+  holdUntil = Date.now() + 5500;
   const token = uuid();
   S.undo = {
     token, label,
     run() {
-      added.forEach((o) => {
-        const pending = S.queue.includes(o) && !inflight.has(o.id);
-        if (pending) S.queue = S.queue.filter((x) => x !== o);
-        else if (o.op === 'log.append') S.queue.push({ id: uuid(), op: 'log.delete', row: { ClientID: o.row.ClientID } });
-      });
-      // Put back any queued rows the action folded an edit into.
-      JSON.parse(queuedRows).forEach((old) => { const q = S.queue.find((x) => x.id === old.id); if (q) q.row = old.row; });
-      S.active = JSON.parse(snap);
+      S.queue = JSON.parse(snapQueue);
+      S.active = JSON.parse(snapActive);
       S.undo = null;
-      if (S.active) pushSession();
+      holdUntil = 0;
       save('queue', 'active'); scheduleSync(); emit();
     },
   };
   setTimeout(() => { if (S.undo && S.undo.token === token) { S.undo = null; emit(); } }, 5000);
-  save('active'); emit();
+  save('active', 'queue'); scheduleSync(); emit();
 }
-export const dismissUndo = () => { S.undo = null; emit(); };
+export const dismissUndo = () => { S.undo = null; holdUntil = 0; emit(); syncNow(); };
 
 /* ---------- session ---------- */
 
 const libGroup = (name) => groupOf(view().library, name);
 export const itemGroup = (it) => libGroup(it.exercise);
 export const isLogged = (it) => it.sets.length > 0 || !!it.skipped;
-export const isComplete = (it) => !!it.skipped || (it.sets.length > 0 && it.sets.length >= (it.target || 1));
+export const isComplete = (it) => !!it.skipped || (it.finished && it.sets.length > 0) || (it.sets.length > 0 && it.sets.length >= (it.target || 1));
 export const lastFor = (it) => lastTime(view().hist, it.exercise, S.active ? S.active.id : null);
 
 export function modeOf(s) {
   if (s.freestyle) return 'freestyle';
-  return s.items.some((i) => i.kind !== 'planned' || i.skipped) ? 'modified' : 'as planned';
+  return s.removed || s.items.some((i) => i.kind !== 'planned' || i.skipped) ? 'modified' : 'as planned';
 }
 const sessionRow = (s) => ({
   SessionID: s.id, Date: s.date, Day: s.day, Mode: modeOf(s), Injury: !!s.injury,
@@ -386,6 +387,40 @@ export function addItem(name) {
   pushSession(); save('active'); emit();
 }
 
+// Ends an exercise early, keeping the sets already logged.
+export function finishItem(key) {
+  undoable('Exercise finished.', () => {
+    const s = S.active, it = s.items.find((i) => i.key === key);
+    it.finished = true;
+    if (s.items[s.cur] === it) advance(s);
+  });
+}
+
+// Takes an exercise out of the session and deletes anything logged for it.
+export function deleteItem(key) {
+  const s = S.active, it = s.items.find((i) => i.key === key);
+  undoable(`Removed ${it.exercise}.`, () => {
+    it.sets.forEach((x) => enqueueDelete(x.id));
+    if (it.skipped) enqueueDelete(it.skipped.id);
+    const i = s.items.indexOf(it);
+    s.items.splice(i, 1);
+    if (it.kind === 'planned' && !s.freestyle) s.removed = (s.removed || 0) + 1;
+    if (s.cur >= s.items.length) s.cur = Math.max(0, s.items.length - 1);
+    else if (i < s.cur) s.cur--;
+    if (s.timer && !s.items.length) s.timer = null;
+    pushSession();
+  });
+}
+
+// Deletes a past session and all its sets from the sheet.
+export function deleteSession(id) {
+  undoable('Session deleted.', () => {
+    (view().bySession[id] || []).forEach((r) => enqueueDelete(r.ClientID));
+    S.queue = S.queue.filter((o) => !(o.op === 'session.upsert' && o.row.SessionID === id && !inflight.has(o.id)));
+    enqueue('session.delete', { SessionID: id });
+  });
+}
+
 export function moveItem(key, dir) {
   const s = S.active, i = s.items.findIndex((x) => x.key === key), j = i + dir;
   if (j < 0 || j >= s.items.length) return;
@@ -424,6 +459,7 @@ export function finishSession(skipReason, endAt) {
   enqueue('session.upsert', row);
   S.active = null;
   S.undo = null;
+  holdUntil = 0;
   save('active'); emit();
   const v = view();
   S.summary = {

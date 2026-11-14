@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { S, useStore, view, startSession, finishStale, discardSession } from './store.js';
 import { Icon, Sheet, SyncBadge, Tag } from './ui.jsx';
-import { isoOf, candidates, preselect, describeDay, weekCells, mondayOf, niceDate, DAY_FULL } from './logic.js';
+import { isoOf, candidates, preselect, describeDay, weekCells, mondayOf, niceDate, DAY_FULL, FOCUS_GRADIENT, DEFAULT_GRADIENT } from './logic.js';
 
 const CELL_LABEL = { done: 'done', partly: 'partly done', skipped: 'skipped', upcoming: 'planned', none: 'not planned', free: 'freestyle' };
 
@@ -23,6 +23,7 @@ function DayCard({ c, plan, compact, onClick }) {
   const d = describeDay(c, plan);
   const Inner = (
     <>
+      {!compact && <div class="heroband" style={{ background: FOCUS_GRADIENT[c.Focus] || DEFAULT_GRADIENT }}><span>{c.Focus || 'Session'}</span><span>{c.Location}</span></div>}
       <div class="row between">
         <h2>{d.title}</h2>
         {compact ? <span class={`badge ${c.doneThisWeek ? 'ok' : ''}`}>{c.doneThisWeek ? 'Done this week' : 'Not done this week'}</span> : c.done && <Tag kind="done" />}
@@ -32,7 +33,7 @@ function DayCard({ c, plan, compact, onClick }) {
       <p class="muted small">{d.count} exercises, about {d.minutes} min</p>
     </>
   );
-  return compact ? <button class="card pick" onClick={onClick}>{Inner}</button> : <div>{Inner}</div>;
+  return compact ? <button class="card pick" style={{ '--g-bg': FOCUS_GRADIENT[c.Focus] || DEFAULT_GRADIENT }} onClick={onClick}>{Inner}</button> : <div class="stack tight">{Inner}</div>;
 }
 
 export function Start({ go }) {

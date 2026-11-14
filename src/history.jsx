@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
-import { S, useStore, view, updateRow } from './store.js';
+import { S, useStore, view, updateRow, deleteSession } from './store.js';
 import { Icon, Tag, Sheet, Chips, LineChart } from './ui.jsx';
-import { EditSet } from './session.jsx';
+import { EditSet, Description } from './session.jsx';
 import { WeekStrip } from './start.jsx';
 import {
   niceDate, isoOf, addDays, mondayOf, sessionModeLabel, sessionExercises, fmtKg, fmtSet, e1rm, weekCells, DAY_FULL,
@@ -49,6 +49,9 @@ function SessionDetail({ s, onClose }) {
           ))}
         </div>
       ))}
+      {(!S.active || S.active.id !== s.SessionID) && (
+        <button class="btn ghost danger" onClick={() => { deleteSession(s.SessionID); onClose(); }}>Delete this session</button>
+      )}
       {edit && (
         <EditSet set={{ kg: edit.Kg, reps: edit.Reps, rpe: edit.RPE }} onClose={() => setEdit(null)}
           onSave={(p) => { updateRow(edit, { Kg: p.kg, Reps: p.reps, RPE: p.rpe === '' ? '' : Number(p.rpe) }); setEdit(null); }} />
@@ -81,6 +84,7 @@ function ExerciseView() {
       {ex && (
         <section class="card">
           <h2>{ex}</h2>
+          <Description name={ex} />
           <Chips label="Measure" options={['Top weight', 'Estimated 1RM']} value={metric} onPick={setMetric} />
           <Chips label="Range" options={['4 weeks', '12 weeks', 'All']} value={range} onPick={setRange} />
           {points.length >= 2 ? <LineChart points={points} unit="kg" />

@@ -5,6 +5,13 @@ export const DAY_FULL = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export const GROUPS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Glutes', 'Core', 'Other'];
 export const LOWER = ['Legs', 'Glutes'];
+export const GROUP_COLOURS = { Chest: '#EA580C', Back: '#2563EB', Shoulders: '#7C3AED', Arms: '#DB2777', Legs: '#0D9488', Glutes: '#C026D3', Core: '#CA8A04', Other: '#64748B' };
+export const FOCUS_GRADIENT = {
+  'Upper body': 'linear-gradient(135deg, #2563EB, #7C3AED)',
+  'Lower body': 'linear-gradient(135deg, #0D9488, #16A34A)',
+  'Full body': 'linear-gradient(135deg, #EA580C, #DB2777)',
+};
+export const DEFAULT_GRADIENT = 'linear-gradient(135deg, #0EA5E9, #16A34A)';
 
 const pad = (n) => String(n).padStart(2, '0');
 export const isoOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

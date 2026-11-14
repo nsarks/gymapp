@@ -211,7 +211,7 @@ function sync_(ops) {
     const ss = book_();
     const applied = [];
     applyKeyed_(ss, 'Log', 'ClientID', ops, { 'log.append': 'append', 'log.update': 'upsert', 'log.delete': 'delete' }, applied);
-    applyKeyed_(ss, 'Sessions', 'SessionID', ops, { 'session.upsert': 'upsert' }, applied);
+    applyKeyed_(ss, 'Sessions', 'SessionID', ops, { 'session.upsert': 'upsert', 'session.delete': 'delete' }, applied);
     applyKeyed_(ss, 'Library', 'Exercise', ops, { 'library.add': 'append' }, applied);
     return { ok: true, applied: applied };
   } finally {
@@ -287,6 +287,25 @@ function setup() {
   Logger.log(seeded ? 'Plan seeded: ' + seeded + ' rows.' : 'Plan already had rows, left as it was.');
 }
 
+// Rebuilds AppPlan, PlanDays and the plan part of Library from Chloe's tabs, for when her plan changes.
+// Log, Sessions and Progress are not touched. Library keeps every exercise that appears in Log.
+function reseedPlan() {
+  const ss = book_();
+  ['AppPlan', 'PlanDays'].forEach(function (name) {
+    const sheet = appSheet_(ss, name);
+    if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS[name].length).clearContent();
+  });
+  const used = {};
+  readRows_(ss, 'Log').forEach(function (r) { used[nameKey_(r.Exercise)] = true; });
+  const lib = appSheet_(ss, 'Library');
+  const keep = readRows_(ss, 'Library').filter(function (l) { return used[nameKey_(l.Exercise)]; });
+  if (lib.getLastRow() > 1) lib.getRange(2, 1, lib.getLastRow() - 1, HEADERS.Library.length).clearContent();
+  if (keep.length) lib.getRange(2, 1, keep.length, HEADERS.Library.length).setValues(keep.map(function (l) { return toRow_('Library', l); }));
+  const n = seedPlan_(ss);
+  seedLibrary_(ss);
+  Logger.log('Plan rebuilt: ' + n + ' rows. Library kept ' + keep.length + ' logged exercises.');
+}
+
 function resetKey() {
   const key = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
   PropertiesService.getScriptProperties().setProperty('KEY', key);
@@ -317,9 +336,12 @@ function nameKey_(name) {
 }
 
 // Reads one of Chloe's tabs. Read only.
+// Uses the text as shown in the sheet: some cells that show "10-12" are really dates formatted as d-m.
+// A tab can hold several blocks (one per review, separated by blank rows). The LAST block is the current plan.
+// Comments from every block are kept as the exercise's note, latest first, skipping bare numbers and "done".
 function readSourceTab_(sheet) {
   const range = sheet.getDataRange();
-  const values = range.getValues();
+  const values = range.getDisplayValues();
   range.getMergedRanges().forEach(function (m) {
     const r0 = m.getRow() - 1, c0 = m.getColumn() - 1;
     const v = values[r0] ? values[r0][c0] : '';
@@ -339,25 +361,42 @@ function readSourceTab_(sheet) {
   if (headRow < 0) return [];
   const get = function (row, label) { return col[label] === undefined ? '' : clean_(row[col[label]]); };
   const blank = function (v) { return v === '' || v === '/'; };
-  const out = [];
-  const seen = {};
+  const blocks = [];
+  let cur = null;
   for (let r = headRow + 1; r < values.length; r++) {
     const row = values[r];
     const exercise = get(row, 'EXERCISE');
-    if (!exercise || exercise.toUpperCase() === 'EXERCISE') continue;
+    if (!exercise) { cur = null; continue; }
+    if (exercise.toUpperCase() === 'EXERCISE') { cur = null; continue; }
     let reps = get(row, 'REPS');
     const sets = get(row, 'SETS');
     const duration = get(row, 'DURATION');
     if (blank(reps) && blank(sets) && blank(duration)) continue; // a note, not an exercise
-    if (seen[nameKey_(exercise)]) continue;
-    seen[nameKey_(exercise)] = true;
+    if (!cur) { cur = []; blocks.push(cur); }
     if (blank(reps)) reps = blank(duration) ? '' : duration;
     const tempo = get(row, 'TEMPO');
-    out.push({
+    cur.push({
       Exercise: exercise, Sets: blank(sets) ? '' : sets, Reps: reps,
       Tempo: blank(tempo) ? '' : tempo, Rest: get(row, 'REST'), Cue: get(row, 'COMMENTS'),
     });
   }
+  if (!blocks.length) return [];
+  const notes = {};
+  blocks.forEach(function (b) {
+    b.forEach(function (x) {
+      const c = x.Cue;
+      if (c && !/^[\d.\s]*$/.test(c) && !/^done$/i.test(c)) notes[nameKey_(x.Exercise)] = c;
+    });
+  });
+  const out = [];
+  const seen = {};
+  blocks[blocks.length - 1].forEach(function (x) {
+    const k = nameKey_(x.Exercise);
+    if (seen[k]) return;
+    seen[k] = true;
+    x.Cue = notes[k] || '';
+    out.push(x);
+  });
   return out;
 }
 
@@ -366,6 +405,7 @@ function guessGroup_(name) {
   if (/face\s*pull|shoulder|lateral|overhead|arm circle|rear delt/.test(n)) return 'Shoulders';
   if (/squat|sit.to.stand|lunge|calf|leg|hamstr|hamtr|bulgarian|step|deadlift|ankle|knee/.test(n)) return 'Legs';
   if (/glute|clam|hip thrust|bridge/.test(n)) return 'Glutes';
+  if (/pall?of|pull\s*off/.test(n)) return 'Core';
   if (/curl|tricep|dip|pushdown|skull/.test(n)) return 'Arms';
   if (/row|pull|lat\b|chin/.test(n)) return 'Back';
   if (/bench|chest|press|push.?up|fly/.test(n)) return 'Chest';
@@ -453,8 +493,8 @@ function seedPlan_(ss) {
 
 function seedLibrary_(ss) {
   const sheet = appSheet_(ss, 'Library');
-  if (sheet.getLastRow() > 1) return;
   const seen = {};
+  readRows_(ss, 'Library').forEach(function (l) { seen[nameKey_(l.Exercise)] = true; });
   const rows = [];
   readRows_(ss, 'AppPlan').forEach(function (p) {
     const k = nameKey_(p.Exercise);
@@ -465,7 +505,7 @@ function seedLibrary_(ss) {
       Unilateral: /\bsl\b|single|side|split|bulgarian|clam/i.test(p.Exercise),
     }));
   });
-  if (rows.length) sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+  if (rows.length) sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
 // Progress is formulas only. The script writes the formulas once here and never touches the tab again.
