@@ -62,6 +62,14 @@ The spec said to pick the simpler option and note it.
 - **Muscle groups in Library are a first guess from the exercise name.** Edit the Group column in the sheet if any are wrong; "Skip legs" uses Legs and Glutes.
 - **A session done on a different day keeps its planned Day** (Monday's session done on Tuesday is logged as Day = Mon with Tuesday's date).
 
+## Workout summary
+
+When a session finishes, and from any finished session in History, the app offers a plain English summary with Copy and Share buttons, for pasting into Google Health or sending to Chloe. It is built on the phone from the logged sets by fixed rules (no AI service, no cost): session name and time, swaps and skips with reasons, warm-up, each exercise's sets, sets below the plan's rep target, up to three "up on last time" lines, and the session note.
+
+- **Dumbbell weights are per dumbbell.** An exercise counts as dumbbell work when its Library Equipment is Dumbbell (or, if Equipment is blank, when its name contains "DB" or "dumbbell"). The summary says "with 14 kg dumbbells" and volume counts both dumbbells, in the app and the summary. The Progress tab in the sheet still counts one.
+- **Warm-up state is stored at the front of the session note** ("Warm-up done | ..."), because the Sessions tab has no warm-up column and adding one would mean redeploying the script. "Whole warm-up done" on any warm-up exercise marks it in one tap; starting without the warm-up records "Warm-up skipped".
+- **Past sessions can be corrected in History**: "Mark as done" for the warm-up, and "Wrong exercise? Change it" to rename an exercise. Against the plan, a rename is recorded as a swap so Chloe can see it.
+
 ## Layout
 
 - `apps-script/Code.gs`: the whole backend.

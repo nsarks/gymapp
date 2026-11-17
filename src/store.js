@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import {
   applyOp, buildHistory, sessionStats, lastTime, improvements, isoOf, dayOf, uuid, maxNum, restSeconds,
-  planFor, groupOf, sameName, LOWER,
+  planFor, groupOf, sameName, LOWER, joinNote, splitNote, volumeFactor, sessionSummaryText,
 } from './logic.js';
 
 /* ---------- IndexedDB (one key-value store) ---------- */
@@ -63,8 +63,9 @@ export function view() {
   const rows = Object.values(log);
   const bySession = {};
   rows.forEach((r) => (bySession[r.SessionID] ||= []).push(r));
+  const factor = volumeFactor(library);
   const list = Object.values(sessions).map((s) => {
-    const st = sessionStats(bySession[s.SessionID] || []);
+    const st = sessionStats(bySession[s.SessionID] || [], factor);
     return { ...s, _stats: st, _skips: st.skipped };
   }).sort((a, b) => (b.Date + b.Start).localeCompare(a.Date + a.Start));
   return (viewCache = { rows, bySession, sessions: list, library, hist: buildHistory(rows) });
@@ -219,8 +220,8 @@ export const dismissUndo = () => { S.undo = null; holdUntil = 0; emit(); syncNow
 
 const libGroup = (name) => groupOf(view().library, name);
 export const itemGroup = (it) => libGroup(it.exercise);
-export const isLogged = (it) => it.sets.length > 0 || !!it.skipped;
-export const isComplete = (it) => !!it.skipped || (it.finished && it.sets.length > 0) || (it.sets.length > 0 && it.sets.length >= (it.target || 1));
+export const isLogged = (it) => it.sets.length > 0 || !!it.skipped || !!it.done;
+export const isComplete = (it) => !!it.skipped || !!it.done || (it.finished && it.sets.length > 0) || (it.sets.length > 0 && it.sets.length >= (it.target || 1));
 export const lastFor = (it) => lastTime(view().hist, it.exercise, S.active ? S.active.id : null);
 
 export function modeOf(s) {
@@ -229,7 +230,7 @@ export function modeOf(s) {
 }
 const sessionRow = (s) => ({
   SessionID: s.id, Date: s.date, Day: s.day, Mode: modeOf(s), Injury: !!s.injury,
-  Note: [s.injuryNote, s.note].filter(Boolean).join(' | '), Start: s.start, End: s.end,
+  Note: joinNote(s.warm, s.injuryNote, s.note), Start: s.start, End: s.end,
 });
 function pushSession() { enqueue('session.upsert', sessionRow(S.active)); }
 
@@ -248,6 +249,8 @@ export function startSession(pd, withWarm) {
       tempo: p.Tempo, rest: p.Rest, cue: p.Cue,
     })) : [],
   };
+  // '' until the warm-up is done; 'skipped' when the session starts without it.
+  S.active.warm = pd && !withWarm && planFor(S.boot.plan, pd.Day, true).some((p) => p.Block === 'Warm-up') ? 'skipped' : '';
   S.prefs.warm = withWarm;
   S.summary = null;
   pushSession();
@@ -284,11 +287,23 @@ export function logSet(key, vals) {
   const id = uuid();
   const note = it.note; it.note = '';
   enqueue('log.append', setRow(s, it, it.sets.length + 1, { ...v, note }, id));
+  if (it.block === 'Warm-up' && s.warm !== 'done') { s.warm = 'done'; pushSession(); }
   it.sets.push({ id, kg: Number(v.kg) || 0, reps: Number(v.reps) || 0, rpe: v.rpe ?? '', note });
   it.draft = null;
   const secs = restSeconds(it.rest);
   s.timer = { end: Date.now() + secs * 1000, total: secs };
   save('active'); emit();
+}
+// One tap for the whole warm-up instead of logging each mobility exercise.
+export function markWarmDone() {
+  undoable('Warm-up done.', () => {
+    const s = S.active;
+    s.warm = 'done';
+    s.items.forEach((i) => { if (i.block === 'Warm-up' && !i.sets.length && !i.skipped) i.done = true; });
+    const n = s.items.findIndex((i) => !isComplete(i));
+    if (n >= 0) s.cur = n;
+    pushSession();
+  });
 }
 export function timerAdd(secs) { const t = S.active.timer; t.end = Math.max(t.end, Date.now()) + secs * 1000; t.total += secs; save('active'); emit(); }
 export function timerClear() { if (S.active) { S.active.timer = null; save('active'); emit(); } }
@@ -463,7 +478,7 @@ export function finishSession(skipReason, endAt) {
   save('active'); emit();
   const v = view();
   S.summary = {
-    id: s.id, name: s.name, injuryNote: s.injuryNote, note: '', row,
+    id: s.id, name: s.name, injuryNote: s.injuryNote, warm: s.warm, note: '', row,
     minutes: Math.max(1, Math.round((new Date(s.end) - new Date(s.start)) / 60000)),
     improved: improvements(v.hist, s.id),
   };
@@ -474,7 +489,7 @@ export function finishSession(skipReason, endAt) {
 export function saveSummaryNote(text) {
   const m = S.summary;
   m.note = text;
-  m.row = { ...m.row, Note: [m.injuryNote, text].filter(Boolean).join(' | ') };
+  m.row = { ...m.row, Note: joinNote(m.warm, m.injuryNote, text) };
   enqueue('session.upsert', m.row);
   emit();
 }
@@ -492,4 +507,38 @@ export function discardSession() {
   if (S.base.sessions[s.id] || inflight.size) S.queue.push({ id: uuid(), op: 'session.delete', row: { SessionID: s.id } });
   S.active = null;
   save('queue', 'active'); scheduleSync(); emit();
+}
+
+/* ---------- corrections to a past session ---------- */
+
+const SESSION_FIELDS = ['SessionID', 'Date', 'Day', 'Mode', 'Injury', 'Note', 'Start', 'End'];
+const sessionOnly = (s) => Object.fromEntries(SESSION_FIELDS.map((k) => [k, s[k] ?? '']));
+
+export function setSessionWarm(session, warm) {
+  enqueue('session.upsert', { ...sessionOnly(session), Note: joinNote(warm, splitNote(session.Note).rest) });
+  emit();
+}
+
+// Fixes an exercise logged under the wrong name. Against the plan it is recorded as a swap, so Chloe sees it.
+export function renameExercise(session, rows, name) {
+  rows.filter((r) => r.Status !== 'skipped').forEach((r) => {
+    const planned = r.Status === 'swapped' ? r.PlannedExercise : r.Status === 'added' ? '' : r.Exercise;
+    const back = planned && sameName(planned, name);
+    enqueue('log.update', {
+      ...r, Exercise: name,
+      Status: r.Status === 'added' ? 'added' : back ? 'done' : 'swapped',
+      PlannedExercise: r.Status === 'added' || back ? '' : planned,
+    });
+  });
+  if (session.Mode === 'as planned') enqueue('session.upsert', { ...sessionOnly(session), Mode: 'modified' });
+  emit();
+}
+
+// Plain English summary of a finished session, built from the logged rows.
+export function summaryText(sessionId, fallback) {
+  const v = view();
+  const session = v.sessions.find((x) => x.SessionID === sessionId) || fallback;
+  if (!session) return '';
+  const planDay = session.Mode === 'freestyle' ? null : S.boot.planDays.find((p) => p.Day === session.Day) || null;
+  return sessionSummaryText({ session, rows: v.bySession[sessionId] || [], planDay, plan: S.boot.plan, library: v.library, hist: v.hist });
 }

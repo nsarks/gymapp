@@ -82,10 +82,11 @@ export const lastTime = (hist, exercise, notSession) => {
   return list[list.length - 1] || null;
 };
 
-export function sessionStats(rows) {
+// factor(exercise) is 2 for dumbbell work, since dumbbell weights are logged per dumbbell.
+export function sessionStats(rows, factor = () => 1) {
   const sets = rows.filter((r) => r.Status !== 'skipped' && r.SetNo !== '' && r.SetNo != null);
   return {
-    volume: Math.round(volumeOf(sets.map((r) => ({ kg: r.Kg, reps: r.Reps })))),
+    volume: Math.round(sets.reduce((t, r) => t + (Number(r.Kg) || 0) * (Number(r.Reps) || 0) * factor(r.Exercise), 0)),
     sets: sets.length,
     skipped: rows.filter((r) => r.Status === 'skipped').length,
     swapped: new Set(rows.filter((r) => r.Status === 'swapped').map((r) => r.Exercise)).size,
@@ -180,4 +181,154 @@ export function weekCells(monday, today, planDays, sessions) {
 export function toCsv(rows, head) {
   const esc = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   return [head.join(','), ...rows.map((r) => head.map((h) => esc(r[h])).join(','))].join('\n');
+}
+
+/* ---------- warm-up marker ---------- */
+
+// The Sessions tab has no warm-up column, so the state rides at the front of the session note,
+// where Chloe can read it too: "Warm-up done | Left bicep sore".
+export const WARM = { done: 'Warm-up done', skipped: 'Warm-up skipped' };
+export function splitNote(note) {
+  const parts = String(note || '').split(' | ').map((p) => p.trim()).filter(Boolean);
+  let warm = '';
+  if (parts[0] === WARM.done) warm = 'done';
+  else if (parts[0] === WARM.skipped) warm = 'skipped';
+  return { warm, rest: (warm ? parts.slice(1) : parts).join(' | ') };
+}
+export const joinNote = (warm, ...rest) => [WARM[warm] || '', ...rest].filter(Boolean).join(' | ');
+
+/* ---------- plain English session summary ---------- */
+
+const libEntry = (library, name) => library.find((l) => sameName(l.Exercise, name)) || {};
+// Dumbbell weights are logged per dumbbell, so volume counts both.
+export const isDumbbell = (library, name) => {
+  const eq = String(libEntry(library, name).Equipment || '');
+  return eq ? /dumb/i.test(eq) : /\bDB\b|dumbbell/i.test(String(name));
+};
+export const volumeFactor = (library) => (name) => (isDumbbell(library, name) ? 2 : 1);
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const longDate = (iso) => { const d = parseISO(iso); return `${WEEKDAYS[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`; };
+const clock = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const lower = (s) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+const nums = (text) => (String(text ?? '').match(/\d+(\.\d+)?/g) || []).map(Number);
+const isTimed = (repsText) => /\d\s*s\b|sec/i.test(String(repsText || ''));
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+
+// "3 x 12 at 14 kg", "3 sets at 60 kg: 8, 6 and 6 reps", "1 x 12 at 12 kg, then 2 x 12 at 10 kg"
+export function describeSets(sets, { dumbbell = false, timed = false } = {}) {
+  const groups = [];
+  sets.forEach((s) => {
+    const g = groups[groups.length - 1];
+    if (g && g.kg === s.kg) g.reps.push(s.reps); else groups.push({ kg: s.kg, reps: [s.reps] });
+  });
+  const load = (kg) => (!kg ? 'bodyweight' : dumbbell ? `${fmtKg(kg)} kg dumbbells` : `${fmtKg(kg)} kg`);
+  const unit = timed ? ' s' : '';
+  const one = (g) => {
+    const at = `${g.kg ? (dumbbell ? 'with' : 'at') : 'at'} ${load(g.kg)}`;
+    if (g.reps.every((r) => r === g.reps[0])) return `${g.reps.length} x ${g.reps[0]}${unit} ${at}`;
+    return `${g.reps.length} sets ${at}: ${listWords(g.reps.map(String))}${timed ? ' seconds' : ' reps'}`;
+  };
+  return groups.map(one).join(', then ');
+}
+
+/**
+ * Builds the copy-and-paste summary for one session from logged data only.
+ * session: Sessions row. rows: its Log rows. planDay: PlanDays row or null. plan: AppPlan rows.
+ * hist: buildHistory of all rows, for the "up on last time" lines.
+ */
+export function sessionSummaryText({ session, rows, planDay, plan = [], library = [], hist = new Map() }) {
+  const freestyle = session.Mode === 'freestyle';
+  const dayPlan = planDay ? plan.filter((p) => p.Day === planDay.Day) : [];
+  const planned = (name) => dayPlan.find((p) => sameName(p.Exercise, name));
+  const warmNames = dayPlan.filter((p) => p.Block === 'Warm-up').map((p) => p.Exercise);
+  const isWarmRow = (r) => warmNames.some((n) => sameName(n, r.Exercise));
+  const { warm: warmMark, rest: noteText } = splitNote(session.Note);
+  const warmLogged = rows.some((r) => isWarmRow(r) && r.Status !== 'skipped');
+  const warm = warmMark || (warmLogged ? 'done' : '');
+
+  const exercises = sessionExercises(rows.filter((r) => !isWarmRow(r)));
+  const worked = exercises.filter((e) => e.status !== 'skipped');
+  const skipped = exercises.filter((e) => e.status === 'skipped');
+  const swaps = worked.filter((e) => e.status === 'swapped');
+  const added = worked.filter((e) => e.status === 'added');
+  const factor = volumeFactor(library);
+  const setRows = worked.flatMap((e) => e.rows.map((r) => ({ ...r, _ex: e.exercise })));
+  const volume = setRows.reduce((t, r) => t + (Number(r.Kg) || 0) * (Number(r.Reps) || 0) * factor(r._ex), 0);
+
+  const title = freestyle ? 'Freestyle session'
+    : planDay ? `${planDay.SessionName || DAY_FULL[planDay.Day] + ' session'}${planDay.Focus ? ` (${lower(planDay.Focus)})` : ''}`
+    : `${DAY_FULL[session.Day] || ''} session`.trim();
+  const out = [`Strength session: ${title}`];
+  let when = longDate(session.Date);
+  if (session.Start && session.End) {
+    const mins = Math.max(1, Math.round((new Date(session.End) - new Date(session.Start)) / 60000));
+    when += `, ${clock(session.Start)} to ${clock(session.End)} (${plural(mins, "minute")})`;
+  }
+  out.push(when);
+
+  let shape;
+  if (freestyle) shape = 'My own session, not from the plan.';
+  else if (!swaps.length && !skipped.length && !added.length) shape = 'Followed the plan, no swaps or skips.';
+  else {
+    const bits = [];
+    if (swaps.length) bits.push(plural(swaps.length, 'swap'));
+    if (skipped.length) bits.push(`${skipped.length} skipped`);
+    if (added.length) bits.push(`${added.length} added`);
+    shape = `Changed the plan: ${listWords(bits)}.`;
+  }
+  out.push(`${shape} ${plural(worked.length, 'exercise')}, ${plural(setRows.length, 'working set')}, about ${(Math.round(volume / 100) * 100).toLocaleString('en-GB')} kg total volume.`);
+  if (warm === 'done') out.push('Warm-up: done.');
+  else if (warm === 'skipped') out.push('Warm-up: skipped.');
+  out.push('');
+
+  const flags = [];
+  worked.forEach((e) => {
+    const sets = e.rows.map((r) => ({ kg: Number(r.Kg) || 0, reps: Number(r.Reps) || 0 }));
+    const p = planned(e.status === 'swapped' && e.planned ? e.planned : e.exercise);
+    const timed = isTimed(p && p.Reps);
+    let line = `- ${e.exercise}`;
+    if (e.status === 'swapped') {
+      const why = (e.rows.map((r) => String(r.Note || '').match(/^Swap reason: (.+)$/)).find(Boolean) || [])[1];
+      line += ` (instead of ${e.planned}${why ? `, ${lower(why)}` : ''})`;
+    } else if (e.status === 'added' && !freestyle) line += ' (added)';
+    line += `: ${describeSets(sets, { dumbbell: isDumbbell(library, e.exercise), timed })}`;
+    const range = p ? nums(p.Reps) : [];
+    if (range.length) {
+      const lo = Math.min(...range), hi = Math.max(...range);
+      const target = lo === hi ? `${lo}` : `${lo} to ${hi}`;
+      const below = sets.filter((s) => s.reps < lo).length;
+      if (below) {
+        line += ` (target ${target}${timed ? ' seconds' : ''})`;
+        flags.push(`${e.exercise}: ${below === sets.length ? 'all sets' : `${below} of ${sets.length} sets`} below the ${target}${timed ? ' second' : ' rep'} target.`);
+      }
+    }
+    out.push(line);
+  });
+  if (!worked.length) out.push('- Nothing logged.');
+  if (skipped.length) {
+    out.push('');
+    out.push(`Skipped: ${skipped.map((e) => { const r = e.rows[0].Note; return r ? `${e.exercise} (${lower(r)})` : e.exercise; }).join('; ')}.`);
+  }
+
+  const ups = [];
+  for (const e of worked) {
+    const list = hist.get(e.exercise) || [];
+    const i = list.findIndex((g) => g.sessionId === session.SessionID);
+    if (i < 1) continue;
+    const now = bestSet(list[i].sets), before = bestSet(list[i - 1].sets);
+    if (!now || !before) continue;
+    if (now.kg > before.kg) ups.push(`${e.exercise} +${fmtKg(now.kg - before.kg)} kg (${fmtSet(now)}, was ${fmtSet(before)})`);
+    else if (now.kg === before.kg && now.reps > before.reps) ups.push(`${e.exercise} +${now.reps - before.reps} reps at ${fmtKg(now.kg)} kg`);
+    if (ups.length === 3) break;
+  }
+  if (ups.length) { out.push(''); out.push(`Up on last time: ${ups.join('; ')}.`); }
+
+  const notes = [];
+  if ((session.Injury === true || session.Injury === 'TRUE') && !noteText) notes.push('Injury or niggle flagged.');
+  if (noteText) notes.push(/[.!?]$/.test(noteText) ? noteText : noteText + '.');
+  notes.push(...flags);
+  if (notes.length) { out.push(''); out.push(`Notes: ${notes.join(' ')}`); }
+  return out.join('\n');
 }

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test test/script.test.mjs test/logic.test.mjs",
+    "test": "node --test test/script.test.mjs test/logic.test.mjs test/summary.test.mjs",
     "test:e2e": "node test/e2e.mjs"
   },
   "dependencies": { "preact": "^10.24.0" },

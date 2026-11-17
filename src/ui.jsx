@@ -19,6 +19,8 @@ const PATHS = {
   today: 'M4 11l8-7 8 7v9h-5v-6H9v6H4z',
   history: 'M4 19V5M4 19h16M8 15l3-4 3 2 4-6',
   settings: 'M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6',
+  copy: 'M9 9h10v11H9zM5 15V4h10',
+  share: 'M12 15V3M8 7l4-4 4 4M5 12v8h14v-8',
 };
 export const Icon = ({ name, size = 20 }) => (
   <svg class="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -151,4 +153,34 @@ export function LineChart({ points, unit }) {
 export function useTick(ms, on = true) {
   const [, set] = useState(0);
   useEffect(() => { if (!on) return; const i = setInterval(() => set((x) => x + 1), ms); return () => clearInterval(i); }, [ms, on]);
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall back below */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+// The session summary as plain text, with Copy and (where the phone supports it) Share.
+export function ShareSummary({ text, title }) {
+  const [msg, setMsg] = useState('');
+  const [open, setOpen] = useState(false);
+  const canShare = typeof navigator !== 'undefined' && !!navigator.share;
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
+  return (
+    <div class="stack tight">
+      <div class="row gap">
+        <button class="btn ghost grow" onClick={async () => flash((await copyText(text)) ? 'Copied. Paste it into Google Health or a message.' : 'Could not copy. Open the text and copy it by hand.')}><Icon name="copy" />Copy summary</button>
+        {canShare && <button class="btn ghost grow" onClick={() => navigator.share({ title, text }).catch(() => {})}><Icon name="share" />Share</button>}
+      </div>
+      {msg && <p class="muted small" role="status">{msg}</p>}
+      <button class="linkbtn" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? 'Hide the text' : 'Show the text'}</button>
+      {open && <pre class="summarytext">{text}</pre>}
+    </div>
+  );
 }

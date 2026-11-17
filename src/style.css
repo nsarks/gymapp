@@ -182,3 +182,6 @@ input.num::-webkit-outer-spin-button, input.num::-webkit-inner-spin-button { -we
 .chart .dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
 .chart .dot.best { fill: var(--accent); }
 .chart .bestlabel { fill: var(--text); font-weight: 800; }
+
+.summarytext { white-space: pre-wrap; font: inherit; font-size: 14px; line-height: 1.45; background: var(--surface2); border-radius: 12px; padding: 12px; margin: 0; user-select: text; -webkit-user-select: text; }
+.linkbtn { background: none; border: 0; padding: 6px 0; color: inherit; text-decoration: underline; font: inherit; text-align: left; min-height: 32px; }
