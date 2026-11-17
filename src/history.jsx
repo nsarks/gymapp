@@ -1,10 +1,10 @@
 import { useState } from 'preact/hooks';
-import { S, useStore, view, updateRow, deleteSession } from './store.js';
-import { Icon, Tag, Sheet, Chips, LineChart } from './ui.jsx';
-import { EditSet, Description } from './session.jsx';
+import { S, useStore, view, updateRow, deleteSession, summaryText, setSessionWarm, renameExercise } from './store.js';
+import { Icon, Tag, Sheet, Chips, LineChart, ShareSummary } from './ui.jsx';
+import { EditSet, Description, Picker } from './session.jsx';
 import { WeekStrip } from './start.jsx';
 import {
-  niceDate, isoOf, addDays, mondayOf, sessionModeLabel, sessionExercises, fmtKg, fmtSet, e1rm, weekCells, DAY_FULL,
+  niceDate, isoOf, addDays, mondayOf, sessionModeLabel, sessionExercises, fmtKg, fmtSet, e1rm, weekCells, DAY_FULL, splitNote,
 } from './logic.js';
 
 const nameOf = (s) => (s.Mode === 'freestyle' ? 'Freestyle' : (S.boot.planDays.find((p) => p.Day === s.Day) || {}).SessionName || `${DAY_FULL[s.Day] || s.Day} session`);
@@ -25,10 +25,25 @@ function SessionRow({ s, onOpen }) {
 
 function SessionDetail({ s, onClose }) {
   const [edit, setEdit] = useState(null);
+  const [rename, setRename] = useState(null);
   const rows = view().bySession[s.SessionID] || [];
+  const live = S.active && S.active.id === s.SessionID;
+  const { warm } = splitNote(s.Note);
   return (
     <Sheet title={nameOf(s)} sub={niceDate(s.Date)} onClose={onClose} tall>
       {s.Note && <p class="notebox">{s.Injury === true && <Tag kind="injury" />} {s.Note}</p>}
+      {!live && s.End && (
+        <section class="card">
+          <h2>Workout summary</h2>
+          <ShareSummary title={nameOf(s)} text={summaryText(s.SessionID)} />
+        </section>
+      )}
+      {!live && s.Mode !== 'freestyle' && (
+        <div class="row between">
+          <span>Warm-up: {warm === 'done' ? 'done' : warm === 'skipped' ? 'skipped' : 'not recorded'}</span>
+          <button class="chip" onClick={() => setSessionWarm(s, warm === 'done' ? '' : 'done')}>{warm === 'done' ? 'Clear' : 'Mark as done'}</button>
+        </div>
+      )}
       {!rows.length && <p class="muted">Nothing was logged.</p>}
       {sessionExercises(rows).map((ex) => (
         <div class="histex" key={ex.exercise + ex.status}>
@@ -37,6 +52,7 @@ function SessionDetail({ s, onClose }) {
             {ex.status !== 'done' && <Tag kind={ex.status} />}
           </div>
           {ex.status === 'swapped' && ex.planned && <p class="muted small">Instead of {ex.planned}</p>}
+          {!live && ex.status !== 'skipped' && <button class="linkbtn small" onClick={() => setRename(ex)}>Wrong exercise? Change it</button>}
           {ex.rows.map((r) => r.Status === 'skipped' ? (
             <p class="muted" key={r.ClientID}>{r.Note || 'No reason given'}</p>
           ) : (
@@ -51,6 +67,11 @@ function SessionDetail({ s, onClose }) {
       ))}
       {(!S.active || S.active.id !== s.SessionID) && (
         <button class="btn ghost danger" onClick={() => { deleteSession(s.SessionID); onClose(); }}>Delete this session</button>
+      )}
+      {rename && (
+        <Sheet title={`Change ${rename.exercise}`} sub="Pick what you actually did. The sets stay as logged." onClose={() => setRename(null)} tall>
+          <Picker mode="rename" item={{ exercise: rename.exercise, planned: rename.planned || rename.exercise }} onPick={(name) => renameExercise(s, rename.rows, name)} onDone={() => setRename(null)} />
+        </Sheet>
       )}
       {edit && (
         <EditSet set={{ kg: edit.Kg, reps: edit.Reps, rpe: edit.RPE }} onClose={() => setEdit(null)}

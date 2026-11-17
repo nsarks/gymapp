@@ -141,6 +141,14 @@ await sleep(200);
 assert.match(await text(), /Session finished/);
 assert.match(await text(), /Offline, pending/);
 await shot('07-summary');
+assert.match(await text(), /Workout summary/);
+await click('Show the text');
+await sleep(100);
+const summary = await page.evaluate(() => document.querySelector('.summarytext').innerText);
+assert.match(summary, /^Strength session: /);
+assert.match(summary, /Warm-up: skipped\./);
+assert.match(summary, /Machine row \(instead of Chest supported - DB row/);
+assert.match(summary, /Notes: Knee: felt sharp on step up\./);
 assert.ok(log().log.length <= 3, 'nothing logged offline has reached the sheet yet');
 
 await page.setOfflineMode(false);
@@ -161,7 +169,7 @@ assert.equal(b.log.filter((r) => r.Exercise === 'Lat Pull down').length, 1);
 assert.equal(b.log.filter((r) => r.Exercise === 'Facepulls').length, 0, 'deleted exercise left nothing behind');
 assert.equal(b.log.find((r) => r.Exercise === 'Incline Bench press').Note, 'Machine busy');
 assert.equal(b.sessions.length, 1);
-assert.deepEqual([b.sessions[0].Mode, b.sessions[0].Injury, b.sessions[0].Note], ['modified', true, 'Knee: felt sharp on step up']);
+assert.deepEqual([b.sessions[0].Mode, b.sessions[0].Injury, b.sessions[0].Note], ['modified', true, 'Warm-up skipped | Knee: felt sharp on step up']);
 assert.ok(b.sessions[0].End);
 assert.ok(b.library.some((l) => l.Exercise === 'Machine row' && l.Group === 'Back'));
 
@@ -178,6 +186,23 @@ await shot('08-history');
 await click('Gym day 1');
 assert.match(await text(), /Instead of Chest supported - DB row/);
 await shot('09-detail');
+assert.match(await text(), /Workout summary/);
+// Correct a past session: warm-up was done, and the bench press was really a barbell bench press.
+await click('Mark as done');
+await sleep(100);
+assert.match(await text(), /Warm-up: done/);
+await click('Wrong exercise? Change it');
+await sleep(100);
+const inputs = await page.$$('.overlay input[type=search]');
+await inputs[inputs.length - 1].type('Barbell bench press');
+await click("Add 'Barbell bench press' as a new exercise");
+await click('Barbell');
+await click('Chest');
+await sleep(100);
+assert.match(await text(), /Instead of DB Bench Press/);
+await click('Show the text');
+assert.match(await page.evaluate(() => document.querySelector('.summarytext').innerText), /Warm-up: done\.[\s\S]*- Barbell bench press \(instead of DB Bench Press\): 1 x 10 at 25 kg, then 2 x 10 at 27.5 kg/);
+
 await click('Close');
 const before2 = log().sessions.length;
 // make a throwaway session, then delete it from history
@@ -198,7 +223,7 @@ await click('Settings');
 await click('Force sync');
 await sleep(600);
 assert.equal(log().sessions.length, before2, 'deleted session is gone from the sheet');
-assert.equal(log().log.filter((r) => r.Exercise === 'DB Bench Press').length, 3);
+assert.equal(log().log.filter((r) => r.Exercise === 'Barbell bench press').length, 3);
 await click('History');
 await click('Exercise');
 assert.match(await text(), /One session in this range/);
@@ -235,7 +260,7 @@ await click('Change session');
 await click('Freestyle session');
 assert.match(await text(), /Build your own/);
 await click('Add an exercise');
-await click('DB Bench Press');
+await click('Barbell bench press');
 assert.match(await text(), /25kg/); // first set prefills from last time
 assert.doesNotMatch(await text(), /3 x 8-10/); // no plan targets in freestyle
 await click('Log set 1');
@@ -243,14 +268,14 @@ await click('Finish session');
 await click('Done');
 
 // Chart needs two or more sessions. Add two older ones straight into the sheet, then refresh.
-const old = (id, s, date, kg) => ({ id, op: 'log.append', row: { ClientID: id, LoggedAt: date + 'T10:00:00Z', SessionID: s, Date: date, Day: 'Mon', Exercise: 'DB Bench Press', PlannedExercise: '', Status: 'done', SetNo: 1, Kg: kg, Reps: 10, RPE: '', Note: '' } });
+const old = (id, s, date, kg) => ({ id, op: 'log.append', row: { ClientID: id, LoggedAt: date + 'T10:00:00Z', SessionID: s, Date: date, Day: 'Mon', Exercise: 'Barbell bench press', PlannedExercise: '', Status: 'done', SetNo: 1, Kg: kg, Reps: 10, RPE: '', Note: '' } });
 g.post({ key, action: 'sync', ops: [old('h1', 'old1', '2026-10-05', 20), old('h2', 'old2', '2026-11-02', 22.5)] });
 await click('Settings');
 await click('Force sync');
 await sleep(600);
 await click('History');
 await click('Exercise');
-await click('DB Bench Press');
+await click('Barbell bench press');
 assert.ok(await page.$('svg.chart'), 'chart drawn');
 assert.equal(await page.$$eval('svg.chart circle', (c) => c.length), 4);
 await click('Estimated 1RM');
@@ -290,6 +315,9 @@ assert.equal(end.log.filter((r) => r.Note === 'Cycled in').length, 3);
 assert.equal(end.sessions.length, 3);
 assert.equal(end.sessions.filter((x) => x.Mode === 'freestyle').length, 1);
 assert.ok(!end.sessions.some((x) => !x.End), 'discarded session is gone');
+assert.equal(end.log.filter((r) => r.Exercise === 'Barbell bench press' && r.Status === 'swapped' && r.PlannedExercise === 'DB Bench Press').length, 3);
+assert.match(end.sessions.find((x) => x.Mode === 'modified').Note, /^Warm-up done \| Knee/);
+assert.ok(end.library.some((l) => l.Exercise === 'Barbell bench press' && l.Equipment === 'Barbell'));
 
 assert.deepEqual(errors, []);
 console.log('e2e passed:', end.log.length, 'log rows,', end.sessions.length, 'sessions');

@@ -2,11 +2,11 @@ import { useEffect, useState } from 'preact/hooks';
 import {
   S, useStore, view, draftOf, setDraft, logSet, editSet, timerAdd, timerClear, skipItem, skipLegs, lowerBodyLeft, unskip,
   swapItem, addItem, addToLibrary, moveItem, goTo, setItemNote, setInjury, unloggedMain, finishSession, isComplete, isLogged,
-  itemGroup, lastFor, saveSummaryNote, syncNow, syncLabel, finishItem, deleteItem,
+  itemGroup, lastFor, saveSummaryNote, syncNow, syncLabel, finishItem, deleteItem, markWarmDone, summaryText,
 } from './store.js';
 import { describe } from './descriptions.js';
-import { Icon, Tag, Sheet, Chips, Stepper, SyncBadge, useTick } from './ui.jsx';
-import { fmtSet, fmtKg, niceDate, GROUPS, GROUP_COLOURS, sameName, groupOf, fmtDuration, sessionStats } from './logic.js';
+import { Icon, Tag, Sheet, Chips, Stepper, SyncBadge, useTick, ShareSummary } from './ui.jsx';
+import { fmtSet, fmtKg, niceDate, GROUPS, GROUP_COLOURS, sameName, groupOf, fmtDuration, sessionStats, volumeFactor } from './logic.js';
 
 const SKIP_REASONS = ['Machine busy', 'Injury or niggle', 'Short on time', 'Not feeling it', 'Other'];
 const SWAP_REASONS = ['Machine busy', 'No equipment', 'Injury or niggle', 'Prefer this', 'Other'];
@@ -63,13 +63,13 @@ function RestTimer({ t }) {
 }
 
 // Search the library, or add a brand new exercise. Used for both swap and add.
-export function Picker({ mode, item, onDone }) {
+export function Picker({ mode, item, onDone, onPick }) {
   const v = view();
   const [q, setQ] = useState('');
   const [reason, setReason] = useState('');
   const [creating, setCreating] = useState(null);
   const [equipment, setEquipment] = useState('');
-  const choose = (name) => { if (mode === 'swap') swapItem(item.key, name, reason); else addItem(name); onDone(); };
+  const choose = (name) => { if (onPick) onPick(name); else if (mode === 'swap') swapItem(item.key, name, reason); else addItem(name); onDone(); };
 
   if (creating) {
     return (
@@ -90,7 +90,7 @@ export function Picker({ mode, item, onDone }) {
   const used = new Set();
   const take = (list) => list.filter((n) => match(n) && !used.has(n.toLowerCase()) && used.add(n.toLowerCase()));
   const sections = [
-    mode === 'swap' && group ? [`Same muscle group (${group})`, take(names.filter((n) => groupOf(v.library, n) === group))] : null,
+    (mode === 'swap' || mode === 'rename') && group ? [`Same muscle group (${group})`, take(names.filter((n) => groupOf(v.library, n) === group))] : null,
     ['Recently used', take(recent.filter((n) => names.some((x) => sameName(x, n))).slice(0, 6))],
     ['All', take([...names].sort((a, b) => a.localeCompare(b)))],
   ].filter((s) => s && s[1].length);
@@ -284,6 +284,9 @@ export function Session({ go }) {
 
       <div class="dock">
         {s.timer && <RestTimer t={s.timer} />}
+        {it && it.block === 'Warm-up' && s.warm !== 'done' && !it.sets.length && (
+          <button class="btn ghost" onClick={markWarmDone}><Icon name="check" />Whole warm-up done</button>
+        )}
         {it && (
           <div class="row gap">
             <button class="btn ghost side" onClick={() => setSheet('item')} aria-label="Exercise options"><Icon name="dots" />Options</button>
@@ -373,7 +376,7 @@ export function Summary({ done }) {
   useStore();
   const m = S.summary;
   const [note, setNote] = useState(m.note);
-  const st = sessionStats(view().bySession[m.id] || []);
+  const st = sessionStats(view().bySession[m.id] || [], volumeFactor(view().library));
   const l = syncLabel();
   return (
     <div class="screen">
@@ -395,6 +398,11 @@ export function Summary({ done }) {
       <section class="card">
         <h2>Session note (optional)</h2>
         <input class="text" value={note} onInput={(e) => setNote(e.target.value)} onBlur={() => note.trim() !== m.note && saveSummaryNote(note.trim())} maxLength={300} placeholder="For example: cycled in, skipped legs" />
+      </section>
+      <section class="card">
+        <h2>Workout summary</h2>
+        <p class="muted small">Plain English, ready to paste into Google Health or send to Chloe. Add your note first so it is included.</p>
+        <ShareSummary title={m.name} text={summaryText(m.id, m.row)} />
       </section>
       <div class="dock">
         <p class={`syncline sync-${l.tone}`}>Sync status: {l.text}</p>
