@@ -27,7 +27,7 @@ const rows = [
 ];
 const session = {
   SessionID: 's1', Date: '2026-11-17', Day: 'Mon', Mode: 'modified', Injury: '',
-  Note: joinNote('done', 'Left Biceps really struggling, lowered bicep weights to compensate'),
+  Note: joinNote('done', 'Gym was busy, kept rests short'),
   Start: '2026-11-17T11:10:00Z', End: '2026-11-17T12:17:00Z',
 };
 
@@ -40,7 +40,7 @@ test('summary of a real session reads as plain English', () => {
   assert.match(t, /- Chest supported - DB row: 3 x 12 with 14 kg dumbbells\n/);
   assert.match(t, /- Hammer curl: 1 x 12 with 12 kg dumbbells, then 2 x 12 with 10 kg dumbbells/);
   assert.match(t, /- Bicep curl: 2 x 12 at 8 kg/);
-  assert.match(t, /Notes: Left Biceps really struggling, lowered bicep weights to compensate\. Barbell bench press: 2 of 3 sets below the 8 to 10 rep target\./);
+  assert.match(t, /Notes: Gym was busy, kept rests short\. Barbell bench press: 2 of 3 sets below the 8 to 10 rep target\./);
   assert.doesNotMatch(t, /Up on last time/);
   assert.doesNotMatch(t, /\u2014/); // no em dashes
 });

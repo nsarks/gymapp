@@ -21,6 +21,7 @@ PWA on GitHub Pages  <-->  Apps Script web app (runs as Nick)  <-->  Google Shee
 ## Rules
 
 - **Never write to Chloe's tabs** (`PLAN`, `CORRECTIVE EXERCISE / WARM UP`, and the day tabs such as `Monday (Gym)`). The script only writes to `AppPlan`, `PlanDays`, `Log`, `Sessions`, `Library`, `Progress`, and `appSheet_()` enforces that. Keep that guard.
+- **This repo is public. Never copy real sheet contents into it**: not Chloe's comments, Nick's weights, logs, notes, injury details or file names, in tests, docs or commit messages. Test data in `test/` is invented and must stay that way; mirror the sheet's layout, not its words.
 - **No secrets in the repo.** The script URL and key live only in the phone's Settings. `apps-script/Code.gs` keeps `const SHEET_ID = 'PASTE_SHEET_ID_HERE';` in the repo. Do not commit sheet IDs, the web app URL or the key, and do not ask Nick to paste the key into a chat.
 - **Sheet data contract.** Column order is defined by `HEADERS` in `Code.gs`. Changing it breaks the existing sheet and the `Progress` formulas, so add columns at the end and say so in the README.
 - **Read Chloe's tabs as displayed text** (`getDisplayValues`). Some cells showing "10-12" are stored as dates.

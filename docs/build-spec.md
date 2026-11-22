@@ -79,7 +79,7 @@ Single deployment, two entry points. Use plain-text POST bodies (`Content-Type: 
 - Wrap writes in `LockService.getScriptLock()`. Batch with `setValues` rather than row-by-row appends.
 - Never log the key. Return generic errors for a bad key.
 - `setup()` (run once manually): creates the new tabs with headers and frozen rows, seeds Plan and Library from the existing tabs, generates the secret key into Script Properties and shows it in the log once.
-- Do NOT try to import historic weights from Chloe's comment text (for example "12kg10. // 25kgx5x2"); it is too ambiguous. Show her note as a read-only "previous note" under the exercise instead, if available.
+- Do NOT try to import historic weights from Chloe's comment text (for example "20kgx10 // 22.5kgx8"); it is too ambiguous. Show her note as a read-only "previous note" under the exercise instead, if available.
 
 ## 5. Screens and behaviour
 

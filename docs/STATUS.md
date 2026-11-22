@@ -6,7 +6,7 @@ Last updated: 22 November 2026. Update this file whenever the state below change
 
 - **Front end:** live at https://nsarks.github.io/gymapp/, deployed from `main` by GitHub Actions.
 - **Backend:** Apps Script project "Gym app" at script.google.com, deployed as a web app (Execute as: Me, Who has access: Anyone). The phone app is connected to it.
-- **Sheet:** the script still points at the **test copy** ("TEST COPY - Nick S (1 - Program) - gym app" in Nick's Drive), not Chloe's real sheet. Nothing logged so far has reached Chloe's sheet.
+- **Sheet:** the script still points at a **test copy** of Chloe's sheet in Nick's Drive, not the real sheet. Nothing logged so far has reached Chloe's sheet.
 - **Deployed backend version:** matches the repo's `doPost` code. The editor also has a later fix to muscle group guesses, which only affects `setup` and `reseedPlan` and needs no new deployment.
 - The phone queues writes and syncs; offline use works.
 

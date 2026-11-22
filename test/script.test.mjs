@@ -37,10 +37,10 @@ test('setup leaves the original tabs untouched and seeds the plan', () => {
   assert.equal(row('Mon', 'Incline Bench press')[6], '8-12'); // latest block wins
   assert.equal(row('Mon', 'Hammer curl')[6], '10-12'); // date cell read as shown, not as a date
   assert.equal(row('Mon', 'Facepulls')[5], '2-3');
-  assert.equal(row('Mon', 'Hammer curl')[9], 'All in the biceps!!! 5kgsx12'); // note carried from an older block
+  assert.equal(row('Mon', 'Hammer curl')[9], 'Squeeze at the top 8kgx12'); // note carried from an older block
   assert.equal(row('Fri', 'Cable - Bicep curl')[6], '10-12');
-  assert.equal(row('Fri', 'Cable - Bicep curl')[9], '13.7kg x12x3'); // "done" is not a note
-  assert.equal(row('Fri', 'Lat Pull down')[9], 'struggled with hip pain');
+  assert.equal(row('Fri', 'Cable - Bicep curl')[9], '12kg x12x3'); // "done" is not a note
+  assert.equal(row('Fri', 'Lat Pull down')[9], 'lighter next time');
   assert.ok(!plan.some((r) => /\b20\d\d\b|GMT/.test(r.join(' '))), 'no date text anywhere in the plan');
   assert.equal(plan.find((r) => r[4] === 'Side plank')[6], '30s'); // duration used when reps is "/"
   assert.ok(!plan.some((r) => /stretch/i.test(r[4]))); // a note row is not an exercise
