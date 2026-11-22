@@ -54,6 +54,7 @@ The spec said to pick the simpler option and note it.
 - **Two extra sync operations**, `log.delete` and `session.delete`, so undo, deleting an exercise or session, removing a mistaken set and discarding an abandoned session reach the sheet.
 - **Sheet cells are read as displayed.** Some of Chloe's cells that show "10-12" are stored as dates (formatted d-m), so the script reads the displayed text.
 - **Exercise descriptions live in the app** (`src/descriptions.js`), written once in plain English. New exercises without a match show no description.
+- **A description is only shown when the name clearly matches.** If the whole name is not a known key, the longest known key inside it is used, so "Seated calf raise" gets its own text rather than the standing one. Keys that are too broad (such as "squat", "pulldown" or "Smith machine") only match a name that is exactly that word, so a variation shows no description rather than a wrong one.
 - **Undo holds sync for five seconds**, so undo is an exact restore.
 - **Bootstrap also returns the full Log and Sessions rows**, so history works on a new phone.
 - **Swap and skip are offered only before any set is logged** for that exercise. After that, use Finish exercise or Delete exercise.

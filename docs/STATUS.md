@@ -24,7 +24,7 @@ Ideas raised so far. None is agreed yet; confirm with Nick before building.
 
 - "New version ready, tap to reload" banner, so updates arrive in one open instead of two.
 - The `Progress` tab counts one dumbbell, while the app and summary count both. Align them if Chloe finds it confusing.
-- Exercise descriptions exist only for exercises in the current plan and common lifts. New exercises show none.
+- Exercise descriptions cover the current plan and about 120 common gym, mobility and cardio exercises. An exercise with no match shows none; an optional `Description` column in `Library` (needs a backend change) would let Nick or Chloe fill the gaps.
 - Deploying the backend is manual. `clasp` (Google's Apps Script command-line tool) could let Claude Code push and publish it, at the cost of a one-time login on Nick's computer.
 
 ## Known limitations
