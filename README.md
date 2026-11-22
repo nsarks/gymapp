@@ -8,6 +8,10 @@ Android Chrome PWA  <-->  Apps Script web app (runs as Nick)  <-->  Google Sheet
 
 No secrets live in this repository. The script URL and key are typed into the app's Settings and stay on the phone.
 
+**Picking this up in a new session?** Read `CLAUDE.md` (working rules, how to deploy each side) and `docs/STATUS.md` (where things stand, which sheet is live, backlog). `docs/build-spec.md` is the original spec.
+
+**Updating the backend later:** the repo copy of `Code.gs` is not deployed automatically. Paste it into the Apps Script project, put the sheet ID back in `SHEET_ID`, save, then Deploy, Manage deployments, edit, New version. Never use New deployment: it changes the URL.
+
 ## 1. Backend (once)
 
 1. Go to script.google.com, create a new project, and replace the contents of `Code.gs` with `apps-script/Code.gs`.
@@ -73,7 +77,10 @@ When a session finishes, and from any finished session in History, the app offer
 ## Layout
 
 - `apps-script/Code.gs`: the whole backend.
-- `src/logic.js`: pure helpers (dates, picking the session, sums). `src/store.js`: state, IndexedDB, sync queue, session actions.
-- `src/start.jsx`, `session.jsx`, `history.jsx`, `settings.jsx`, `ui.jsx`: screens and shared parts.
+- `src/logic.js`: pure helpers (dates, picking the session, sums, the workout summary). `src/store.js`: state, IndexedDB, sync queue, session actions.
+- `src/start.jsx`, `session.jsx`, `history.jsx`, `settings.jsx`, `ui.jsx`, `main.jsx`: screens and shared parts. `src/style.css`: styling.
+- `src/descriptions.js`: short exercise descriptions.
 - `public/sw.js`: caches the app shell so it opens with no signal.
-- `test/`: script tests against a mock of the sheet, logic tests, and an end to end run.
+- `scripts/make-icons.py`: draws the app icons.
+- `test/`: script tests against a mock of the sheet (`mock-gas.mjs`, a simplified stand-in for Google, so check backend changes on the real service too), logic and summary tests, and an end to end run (`e2e.mjs`, set `CHROME` if Chrome is not at `/usr/bin/google-chrome`).
+- `CLAUDE.md`, `docs/`: notes for new sessions, current status and the original spec.
