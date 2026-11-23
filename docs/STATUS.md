@@ -1,10 +1,13 @@
 # Status and backlog
 
-Last updated: 22 November 2026. Update this file whenever the state below changes.
+Last updated: 23 November 2026. Update this file whenever the state below changes.
 
 ## Where things stand
 
 - **Front end:** live at https://nsarks.github.io/gymapp/, deployed from `main` by GitHub Actions.
+- **Test site:** https://nsarks.github.io/gymapp/preview/, built from the `preview` branch with invented data (issue #5). Changes go feature branch, then `preview`, then `main` (see `CLAUDE.md`). The `preview` branch is allowed to deploy in the github-pages environment settings.
+- **Until the test site work is merged into `main`**, a push to `main` publishes the real app alone and takes the test site down until the next push to `preview`. Once it is in `main`, every push rebuilds both.
+- **On a phone or browser that has used the real app**, the old service worker answers `/gymapp/preview/` with the real app (a blank page) until the worker fix in `public/sw.js` reaches `main`. Until then, open the test site in an incognito tab or on another browser. After it reaches `main`, open the real app twice, then the test site works in a normal tab.
 - **Backend:** Apps Script project "Gym app" at script.google.com, deployed as a web app (Execute as: Me, Who has access: Anyone). The phone app is connected to it.
 - **Sheet:** the script still points at a **test copy** of Chloe's sheet in Nick's Drive, not the real sheet. Nothing logged so far has reached Chloe's sheet.
 - **Deployed backend version:** matches the repo's `doPost` code. The editor also has a later fix to muscle group guesses, which only affects `setup` and `reseedPlan` and needs no new deployment.

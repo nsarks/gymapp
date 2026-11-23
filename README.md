@@ -26,14 +26,40 @@ No secrets live in this repository. The script URL and key are typed into the ap
 
 ```
 npm install
-npm test          # script and logic tests
-npm run build     # output in dist/
-npm run test:e2e  # full run in headless Chrome against a mock sheet (needs Chrome)
+npm test            # script and logic tests
+npm run build       # the real app, output in dist/
+npm run build:test  # the test site, output in dist-preview/
+npm run test:e2e    # full runs in headless Chrome against a mock sheet (needs both builds and Chrome)
+npm run dev:test    # the test site on your computer, with live reload
 ```
 
 ### GitHub Pages
 
-Push this folder to the `main` branch of the repository. In the repository: Settings, Pages, Source: GitHub Actions. The included workflow tests, builds and publishes on every push. The app is then at `https://<user>.github.io/<repo>/`.
+Push this folder to the `main` branch of the repository. In the repository: Settings, Pages, Source: GitHub Actions. The included workflow tests, builds and publishes on every push to `main` or `preview`. The app is then at `https://<user>.github.io/<repo>/`, and the test site at `https://<user>.github.io/<repo>/preview/`.
+
+The `preview` branch must be allowed to deploy: Settings, Environments, github-pages, Deployment branches and tags, add `preview`.
+
+### Test site and release pipeline
+
+Every change goes **feature branch, then `preview`, then `main`**:
+
+1. Work happens on a feature branch. Nothing is published.
+2. Merge the feature branch into `preview`. The test site at https://nsarks.github.io/gymapp/preview/ updates a minute or two later. Try it there, on the phone or a computer.
+3. Once happy, merge `preview` into `main`. That publishes the real app.
+
+There is one `preview` branch, not one per feature. A push to either branch rebuilds both sites, because GitHub Pages serves one site per repository: the real app from `main` at `/gymapp/`, the test site from `preview` at `/gymapp/preview/`.
+
+The test site:
+
+- has a striped yellow "Test version" bar on every screen and "(test)" in the tab title;
+- runs the real `Code.gs` inside the page against a mock sheet with invented data (`src/preview/`), so it needs no Settings and cannot reach the real script or sheet;
+- starts with about three weeks of invented history before today, so the week strip, History and summaries have something to show;
+- keeps what you log in that browser only, and Settings has **Reset test data** to go back to the invented data;
+- does not install as an app and has no offline cache.
+
+It uses its own browser database (`gymlog-preview`) and registers no service worker, so it never sees the real app's URL, key or queued data. The real app's service worker ignores everything under `preview/`.
+
+**Backend changes** cannot be tried on the test site against the real sheet: it runs the repo's `Code.gs` against the mock sheet only. The real backend still needs pasting and deploying by hand (see above).
 
 ### On the phone
 
@@ -65,6 +91,9 @@ The spec said to pick the simpler option and note it.
 - **Exercise names are unified across days when seeding** (for example "Lat Pull down" and "Lat pull down" become one), so history does not split.
 - **Reorder uses Move up and Move down** in the exercise options rather than drag.
 - **Muscle groups in Library are a first guess from the exercise name.** Edit the Group column in the sheet if any are wrong; "Skip legs" uses Legs and Glutes.
+- **The test site runs the real `Code.gs` in the page**, with the same mock sheet the tests use (`src/preview/sheet.js`), rather than a separate stub. The test site then behaves like the real backend, and the invented plan comes from the same seeding code. The fake waits 150 ms per request so sync states show.
+- **The test site's invented history is generated from today's date** (`src/preview/seed.js`): about three weeks of the plan's sessions, with two missed days, one skipped exercise, one swap, one added exercise, one injury note and one freestyle session. On a Monday the Today strip is empty because the week has just started; History's Week view shows the earlier weeks.
+- **The test site has no service worker and no install manifest.** It shares `nsarks.github.io` with the real app, and a second worker or install would add risk for no benefit.
 - **A session done on a different day keeps its planned Day** (Monday's session done on Tuesday is logged as Day = Mon with Tuesday's date).
 
 ## Workout summary
@@ -81,7 +110,8 @@ When a session finishes, and from any finished session in History, the app offer
 - `src/logic.js`: pure helpers (dates, picking the session, sums, the workout summary). `src/store.js`: state, IndexedDB, sync queue, session actions.
 - `src/start.jsx`, `session.jsx`, `history.jsx`, `settings.jsx`, `ui.jsx`, `main.jsx`: screens and shared parts. `src/style.css`: styling.
 - `src/descriptions.js`: short exercise descriptions.
-- `public/sw.js`: caches the app shell so it opens with no signal.
+- `src/preview/`: the test site only. `fake.js` runs `Code.gs` in the page, `sheet.js` is the mock sheet (shared with the tests), `seed.js` makes the invented history. The real build leaves all of it out.
+- `public/sw.js`: caches the app shell so it opens with no signal. It ignores `preview/`.
 - `scripts/make-icons.py`: draws the app icons.
-- `test/`: script tests against a mock of the sheet (`mock-gas.mjs`, a simplified stand-in for Google, so check backend changes on the real service too), logic and summary tests, and an end to end run (`e2e.mjs`, set `CHROME` if Chrome is not at `/usr/bin/google-chrome`).
+- `test/`: script tests against a mock of the sheet (`mock-gas.mjs`, a simplified stand-in for Google, so check backend changes on the real service too), logic and summary tests, and two end to end runs (set `CHROME` if Chrome is not at `/usr/bin/google-chrome`): `e2e.mjs` for the real app, and `e2e-preview.mjs` for the real app and test site side by side, checking they never share data.
 - `CLAUDE.md`, `docs/`: notes for new sessions, current status and the original spec.

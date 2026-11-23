@@ -1,4 +1,4 @@
-// Serves the built app plus a stand-in for the Apps Script web app, running the real Code.gs against a mock sheet.
+// Serves the built app (and the test site build at /preview/, as on GitHub Pages) plus a stand-in for the Apps Script web app, running the real Code.gs against a mock sheet.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,6 +10,8 @@ export function start(port = 0) {
   g.api.setup();
   const key = g.logs.find((l) => /SECRET KEY/.test(l)).split(': ')[1];
   const dist = new URL('../dist/', import.meta.url).pathname;
+  const distPreview = new URL('../dist-preview/', import.meta.url).pathname;
+  g.requests = [];
   const server = http.createServer((req, res) => {
     if (req.url === '/api' && req.method === 'POST') {
       let body = '';
@@ -17,8 +19,14 @@ export function start(port = 0) {
       req.on('end', () => { g.posts.push(body); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(g.post(body))); });
       return;
     }
-    const file = path.join(dist, req.url === '/' ? 'index.html' : decodeURIComponent(req.url.split('?')[0]));
-    if (!file.startsWith(dist) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+    g.requests.push(req.url);
+    let p = decodeURIComponent(req.url.split('?')[0]);
+    if (p === '/preview') { res.writeHead(301, { Location: '/preview/' }); res.end(); return; }
+    const root = p.startsWith('/preview/') ? distPreview : dist;
+    if (root === distPreview) p = p.slice('/preview'.length);
+    if (p.endsWith('/')) p += 'index.html';
+    const file = path.join(root, p);
+    if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
     res.end(fs.readFileSync(file));
   });

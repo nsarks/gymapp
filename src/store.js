@@ -5,11 +5,15 @@ import {
   planFor, groupOf, sameName, LOWER, joinNote, splitNote, volumeFactor, sessionSummaryText,
 } from './logic.js';
 
+// True in the test site build (vite build --mode preview): invented data, a fake backend and its own storage.
+export const TEST = __TEST__;
+
 /* ---------- IndexedDB (one key-value store) ---------- */
 
-let dbp;
+// The test site shares the origin with the real app, so it must use its own database.
+let dbp, resetting = false;
 const db = () => dbp || (dbp = new Promise((res, rej) => {
-  const rq = indexedDB.open('gymlog', 1);
+  const rq = indexedDB.open(TEST ? 'gymlog-preview' : 'gymlog', 1);
   rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
   rq.onsuccess = () => res(rq.result);
   rq.onerror = () => rej(rq.error);
@@ -19,6 +23,7 @@ const kvGet = async (k) => new Promise(async (res, rej) => {
   rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
 });
 const kvSet = async (k, v) => new Promise(async (res, rej) => {
+  if (resetting) { res(); return; }
   const tx = (await db()).transaction('kv', 'readwrite');
   tx.objectStore('kv').put(JSON.parse(JSON.stringify(v ?? null)), k);
   tx.oncomplete = res; tx.onerror = () => rej(tx.error);
@@ -74,6 +79,7 @@ export function view() {
 export async function init() {
   const vals = await Promise.all(KEYS.map((k) => kvGet(k).catch(() => null)));
   KEYS.forEach((k, i) => { if (vals[i]) S[k] = vals[i]; });
+  if (TEST) S.settings = { url: 'test', key: '' }; // the fake backend needs no connection details
   S.ready = true;
   emit();
   addEventListener('online', () => { emit(); refresh(); });
@@ -85,6 +91,13 @@ export async function init() {
 /* ---------- network ---------- */
 
 async function api(body) {
+  const j = TEST ? await testApi(body) : await realApi(body);
+  if (!j.ok) throw Object.assign(new Error(j.error === 'Request refused' ? 'Key not accepted. Check Settings.' : j.error || 'Request failed'), { server: true });
+  return j;
+}
+
+// Test mode never reaches this, so it cannot call a real script URL.
+async function realApi(body) {
   let res;
   try {
     res = await fetch(S.settings.url, {
@@ -96,8 +109,27 @@ async function api(body) {
   if (!res.ok) throw new Error('No connection');
   let j;
   try { j = await res.json(); } catch (e) { throw Object.assign(new Error('Unexpected reply. Check the script URL in Settings.'), { server: true }); }
-  if (!j.ok) throw Object.assign(new Error(j.error === 'Request refused' ? 'Key not accepted. Check Settings.' : j.error || 'Request failed'), { server: true });
   return j;
+}
+
+async function testApi(body) {
+  if (!TEST) throw new Error('Test backend in the real app');
+  const { fakePost } = await import('./preview/fake.js');
+  return fakePost(body, { get: kvGet, set: kvSet });
+}
+
+// Test site only: wipes its own database (never the real app's) and starts again from the invented data.
+export async function resetTestData() {
+  if (!TEST) return;
+  clearTimeout(timer);
+  resetting = true; // no more saves, so nothing lands after the wipe
+  const d = await db();
+  await new Promise((res, rej) => {
+    const tx = d.transaction('kv', 'readwrite');
+    tx.objectStore('kv').clear();
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+  location.reload();
 }
 
 let timer = null, running = null, fails = 0;

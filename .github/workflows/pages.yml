@@ -1,7 +1,9 @@
 name: Deploy to GitHub Pages
+# One Pages site holds both builds: the real app from main at /gymapp/ and the test site from preview at /gymapp/preview/.
+# A push to either branch rebuilds and republishes both.
 on:
   push:
-    branches: [main]
+    branches: [main, preview]
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,16 +17,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+      - name: Check for a preview branch
+        id: preview
+        working-directory: main
+        run: |
+          if git ls-remote --exit-code --heads origin preview > /dev/null; then echo "exists=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.preview.outputs.exists == 'true'
+        with:
+          ref: preview
+          path: preview
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
+          cache-dependency-path: '*/package-lock.json'
+      - name: Build the real app (main)
+        working-directory: main
+        run: |
+          npm ci
+          npm test
+          npm run build
+          if grep -rq "PASTE_SHEET_ID_HERE" dist; then echo "The real app build contains the test backend"; exit 1; fi
+      - name: Build the test site (preview)
+        if: steps.preview.outputs.exists == 'true'
+        working-directory: preview
+        run: |
+          npm ci
+          npm test
+          npm run build:test
+      - name: Put both in one site
+        run: |
+          mkdir site
+          cp -r main/dist/. site/
+          if [ -d preview/dist-preview ]; then cp -r preview/dist-preview site/preview; fi
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
   deploy:
     needs: build
     runs-on: ubuntu-latest

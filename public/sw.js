@@ -1,5 +1,9 @@
 // App shell cache. The shell opens from cache straight away and refreshes itself in the background.
-const CACHE = 'gymlog-shell-v2';
+const CACHE = 'gymlog-shell-v3';
+// The test site lives under preview/, inside this worker's scope. Leave it alone so it never gets the real app.
+// That includes the address without its last slash, which GitHub Pages redirects.
+const PREVIEW = new URL('preview/', self.registration.scope).pathname;
+const isPreview = (url) => url.pathname.startsWith(PREVIEW) || url.pathname === PREVIEW.slice(0, -1);
 
 async function refreshShell() {
   const cache = await caches.open(CACHE);
@@ -22,7 +26,8 @@ self.addEventListener('activate', (e) => e.waitUntil((async () => {
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin || isPreview(url)) return;
   if (req.mode === 'navigate') {
     e.respondWith((async () => {
       const cached = await caches.match('./index.html');

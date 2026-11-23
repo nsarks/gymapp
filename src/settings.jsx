@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { S, useStore, view, saveSettings, syncNow, refresh, syncLabel } from './store.js';
+import { S, useStore, view, saveSettings, syncNow, refresh, syncLabel, TEST, resetTestData } from './store.js';
 import { isoOf, addDays, toCsv } from './logic.js';
 
 const HEAD = ['Date', 'Day', 'Exercise', 'PlannedExercise', 'Status', 'SetNo', 'Kg', 'Reps', 'RPE', 'Note', 'SessionID', 'LoggedAt'];
@@ -29,21 +29,29 @@ export function Settings() {
   return (
     <div class="screen">
       <header class="top"><div class="grow"><h1>Settings</h1></div></header>
-      <form class="card stack" onSubmit={save}>
-        <h2>Sheet connection</h2>
-        <p class="muted small">Stored on this phone only. Do not share either of these with anyone.</p>
-        <label class="field">Script URL
-          <input class="text" type="url" value={url} onInput={(e) => setUrl(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck={false} />
-        </label>
-        <label class="field">Secret key
-          <input class="text" type={show ? 'text' : 'password'} value={key} onInput={(e) => setKey(e.target.value)} autocomplete="off" autocapitalize="off" spellcheck={false} />
-        </label>
-        <div class="row gap">
-          <button type="button" class="btn ghost side" onClick={() => setShow(!show)}>{show ? 'Hide key' : 'Show key'}</button>
-          <button class="btn grow">Save and connect</button>
-        </div>
-        {msg && <p class="muted" role="status">{msg}</p>}
-      </form>
+      {TEST ? (
+        <section class="card stack">
+          <h2>Test version</h2>
+          <p class="muted">This is the test site. It uses invented data and never connects to your sheet. Anything logged here stays in this browser.</p>
+          <button class="btn ghost" onClick={resetTestData}>Reset test data</button>
+        </section>
+      ) : (
+        <form class="card stack" onSubmit={save}>
+          <h2>Sheet connection</h2>
+          <p class="muted small">Stored on this phone only. Do not share either of these with anyone.</p>
+          <label class="field">Script URL
+            <input class="text" type="url" value={url} onInput={(e) => setUrl(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck={false} />
+          </label>
+          <label class="field">Secret key
+            <input class="text" type={show ? 'text' : 'password'} value={key} onInput={(e) => setKey(e.target.value)} autocomplete="off" autocapitalize="off" spellcheck={false} />
+          </label>
+          <div class="row gap">
+            <button type="button" class="btn ghost side" onClick={() => setShow(!show)}>{show ? 'Hide key' : 'Show key'}</button>
+            <button class="btn grow">Save and connect</button>
+          </div>
+          {msg && <p class="muted" role="status">{msg}</p>}
+        </form>
+      )}
       <section class="card stack">
         <h2>Sync</h2>
         <p class={`syncline sync-${l.tone}`}>Status: {l.text}</p>

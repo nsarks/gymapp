@@ -12,7 +12,16 @@ PWA on GitHub Pages  <-->  Apps Script web app (runs as Nick)  <-->  Google Shee
 
 ## How changes reach production
 
-- **Front end:** pushing to `main` runs `.github/workflows/pages.yml` (tests, build, publish) to https://nsarks.github.io/gymapp/. The phone picks up a new version on the second open after a push.
+**Every change goes feature branch, then `preview`, then `main`.**
+
+1. Work on a feature branch (in a cloud session, the branch the session gives you). Run the checks below and push it.
+2. Merge it into `preview` and push `preview`. That publishes the test site at https://nsarks.github.io/gymapp/preview/ (invented data, fake backend, yellow "Test version" bar). Give Nick that link and ask him to try the change.
+3. Only when Nick says he is happy, merge `preview` into `main` and push. That publishes the real app. Never push to `main` or `preview` without Nick asking.
+
+There is one `preview` branch, shared by all features. If `preview` holds something Nick has not approved, ask before merging it into `main`, since it would go out too.
+
+- **Front end:** pushing to `main` or `preview` runs `.github/workflows/pages.yml`, which tests and builds both branches and publishes them together: `main` at https://nsarks.github.io/gymapp/ and `preview` (built with `--mode preview`) at `/gymapp/preview/`. The phone picks up a new version of the real app on the second open after a push.
+- **Test site:** runs the repo's `Code.gs` against a mock sheet inside the page (`src/preview/`). It never calls the real script. It uses its own IndexedDB (`gymlog-preview`) and no service worker; the real worker ignores `preview/`. Keep those separations: both sites share the `nsarks.github.io` origin.
 - **Backend: nothing deploys automatically.** Changing `apps-script/Code.gs` in the repo does nothing on its own. Nick (or Claude in the browser) must paste it into the Apps Script project "Gym app" at script.google.com, put the real sheet ID back in `SHEET_ID`, save, then **Deploy, Manage deployments, pencil, Version: New version, Deploy**.
 - **Never use Deploy, New deployment.** It creates a new URL and the phone app stops working until the URL is re-entered in Settings.
 - Functions run by hand from the editor (`setup`, `reseedPlan`, `resetKey`) use the saved code and need no deployment. `doPost` changes do.
@@ -35,7 +44,8 @@ PWA on GitHub Pages  <-->  Apps Script web app (runs as Nick)  <-->  Google Shee
 npm install
 npm test           # Apps Script tests against a mock sheet, logic tests, summary tests
 npm run build
-npm run test:e2e   # full run in headless Chrome against the mock backend; set CHROME=/path/to/chrome if not /usr/bin/google-chrome
+npm run build:test # the test site
+npm run test:e2e   # e2e.mjs then e2e-preview.mjs; full run in headless Chrome against the mock backend; set CHROME=/path/to/chrome if not /usr/bin/google-chrome
 ```
 
 All must pass. `test/mock-gas.mjs` is a simplified stand-in for Apps Script and Google Sheets, so script changes that pass locally can still fail on Google (the time zone bug did). After a backend change, ask Nick to check the app connects ("Connected. Plan loaded" in Settings) and look at the sheet.
@@ -47,5 +57,6 @@ All must pass. `test/mock-gas.mjs` is a simplified stand-in for Apps Script and 
 - `src/logic.js`: pure helpers: dates, choosing the session, history sums, the workout summary text.
 - `src/start.jsx`, `session.jsx`, `history.jsx`, `settings.jsx`, `ui.jsx`, `main.jsx`: screens and shared parts. `src/style.css`: all styling.
 - `src/descriptions.js`: the short exercise descriptions, matched on a normalised name.
-- `public/sw.js`: offline app shell cache. Bump `CACHE` when changing how it caches.
-- `test/`: `script.test.mjs`, `logic.test.mjs`, `summary.test.mjs`, `e2e.mjs`; `mock-gas.mjs` and `server.mjs` support them.
+- `src/preview/`: test site only (left out of the real build). `fake.js` (Code.gs in the page), `sheet.js` (the mock sheet, also used by the tests), `seed.js` (invented history).
+- `public/sw.js`: offline app shell cache. Bump `CACHE` when changing how it caches. It must keep ignoring `preview/`.
+- `test/`: `script.test.mjs`, `logic.test.mjs`, `summary.test.mjs`, `descriptions.test.mjs`, `preview.test.mjs`, `e2e.mjs`, `e2e-preview.mjs`; `mock-gas.mjs` and `server.mjs` support them.

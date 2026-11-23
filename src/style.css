@@ -21,6 +21,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outl
 .icon { flex: none; }
 
 .app { max-width: 520px; margin: 0 auto; min-height: 100dvh; }
+/* Test site only: a striped bar that stays at the top of every screen. */
+.testbar { position: sticky; top: 0; z-index: 6; padding: 7px 14px; text-align: center; font-size: 14px; font-weight: 750; color: #422006; background: repeating-linear-gradient(135deg, #FDE047 0 14px, #FACC15 14px 28px); border-bottom: 2px solid #CA8A04; }
 .screen { padding: 14px 14px calc(96px + var(--safe-b)); display: flex; flex-direction: column; gap: 14px; }
 .screen.session { padding-bottom: calc(190px + var(--safe-b)); }
 .top { display: flex; align-items: center; gap: 10px; min-height: 48px; }
