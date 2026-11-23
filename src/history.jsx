@@ -130,7 +130,7 @@ function WeekView({ open }) {
   const weeks = Array.from({ length: 8 }, (_, i) => addDays(mondayOf(today), -7 * i));
   return (
     <div class="stack">
-      <p class="muted small legend">Tick: done. Green ring: partly done. Dash: skipped. Dotted ring: still to come. Small dot: not planned.</p>
+      <p class="muted small legend">Green tick: trained, on plan. Ringed tick: trained, not on plan. Green ring: partly done. Dash: skipped. Dotted ring: still to come. Small dot: rest day.</p>
       {weeks.map((mon) => {
         const inWeek = v.sessions.filter((s) => s.Date >= mon && s.Date <= addDays(mon, 6));
         return (

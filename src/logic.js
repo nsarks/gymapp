@@ -160,20 +160,21 @@ export const groupOf = (library, name) => (library.find((l) => sameName(l.Exerci
 
 /* ---------- week views ---------- */
 
-// One week as seven cells: done, partly, skipped, upcoming, none (not planned), free (freestyle only).
+// One week as seven cells, judged only by what was done on each date, so the ticks count the days trained.
+// done: that day's own planned session. partly: that session with skips, or still going.
+// off: trained, but not that day's planned session (another day's session, freestyle, or a rest day).
+// skipped, upcoming: a planned day with nothing done that date. none: a rest day with nothing done.
 export function weekCells(monday, today, planDays, sessions) {
   return DAYS.map((day, i) => {
     const date = addDays(monday, i);
     const planned = planDays.some((p) => p.Day === day);
-    const inWeek = sessions.filter((s) => s.Date >= monday && s.Date <= addDays(monday, 6));
-    const s = inWeek.find((x) => x.Day === day && x.Mode !== 'freestyle');
-    const free = inWeek.some((x) => x.Mode === 'freestyle' && x.Date === date);
-    let state = 'none';
-    if (planned) {
-      if (s && s.End && !s._skips) state = 'done';
-      else if (s) state = 'partly';
-      else state = date < today ? 'skipped' : 'upcoming';
-    } else if (free) state = 'free';
+    const onDate = sessions.filter((s) => s.Date === date);
+    const own = onDate.find((s) => s.Day === day && s.Mode !== 'freestyle');
+    let state;
+    if (own) state = own.End && !own._skips ? 'done' : 'partly';
+    else if (onDate.length) state = 'off';
+    else if (planned) state = date < today ? 'skipped' : 'upcoming';
+    else state = 'none';
     return { day, date, planned, state, isToday: date === today };
   });
 }

@@ -66,6 +66,8 @@ The spec said to pick the simpler option and note it.
 - **Reorder uses Move up and Move down** in the exercise options rather than drag.
 - **Muscle groups in Library are a first guess from the exercise name.** Edit the Group column in the sheet if any are wrong; "Skip legs" uses Legs and Glutes.
 - **A session done on a different day keeps its planned Day** (Monday's session done on Tuesday is logged as Day = Mon with Tuesday's date).
+- **The week strip shows the days trained, not which planned sessions are done.** Each day is judged only by what was logged on that date. That day's own planned session gets a green circle with a white tick (on plan). Any other session that date (another day's session, freestyle, or anything on a rest day) gets a white circle with a green tick (not on plan). So Wednesday's session done on Thursday ticks Thursday and leaves Wednesday as skipped. The Change session sheet and the suggested session still count it as done for Wednesday, so it is not suggested again.
+- **Every day in the Today week strip can be tapped.** Tapping a day picks that day's session to do today; it never backdates. Tapping a rest day shows "Pick a session" and "Freestyle session" rather than choosing for you. Opening the app on a rest day still suggests the nearest session not yet done. When the suggested session belongs to another day, the card says so ("Wednesday's session, logged today").
 
 ## Workout summary
 

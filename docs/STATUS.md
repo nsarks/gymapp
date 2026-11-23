@@ -1,6 +1,6 @@
 # Status and backlog
 
-Last updated: 22 November 2026. Update this file whenever the state below changes.
+Last updated: 23 November 2026. Update this file whenever the state below changes.
 
 ## Where things stand
 
@@ -9,6 +9,7 @@ Last updated: 22 November 2026. Update this file whenever the state below change
 - **Sheet:** the script still points at a **test copy** of Chloe's sheet in Nick's Drive, not the real sheet. Nothing logged so far has reached Chloe's sheet.
 - **Deployed backend version:** matches the repo's `doPost` code. The editor also has a later fix to muscle group guesses, which only affects `setup` and `reseedPlan` and needs no new deployment.
 - The phone queues writes and syncs; offline use works.
+- **Issue 1** (any day can be picked; the week strip shows days trained, on plan or not): built on branch `claude/eloquent-bardeen-4glpj8`, front end only, not yet merged to `main`.
 
 ## Next step: switch to Chloe's real sheet
 

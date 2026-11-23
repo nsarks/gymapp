@@ -89,7 +89,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outl
 .weekday.partly i { border: 3px solid var(--accent); }
 .weekday.done i { background: var(--accent); color: #fff; }
 .weekday.skipped i { background: #E5E7EB; color: var(--grey); }
-.weekday.free i { border: 3px solid var(--blue); }
+.weekday.off i { background: var(--surface); border: 2px solid var(--accent); color: var(--accent); }
+.movednote { color: var(--accent-dark); font-weight: 700; }
 .weekday.none i { width: 6px; height: 6px; background: var(--line); }
 .weekday.today { color: var(--text); background: var(--surface2); }
 .weekday.sel { outline: 2.5px solid var(--text); outline-offset: -2px; }
