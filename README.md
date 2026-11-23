@@ -95,6 +95,8 @@ The spec said to pick the simpler option and note it.
 - **The test site's invented history is generated from today's date** (`src/preview/seed.js`): about three weeks of the plan's sessions, with two missed days, one skipped exercise, one swap, one added exercise, one injury note and one freestyle session. On a Monday the Today strip is empty because the week has just started; History's Week view shows the earlier weeks.
 - **The test site has no service worker and no install manifest.** It shares `nsarks.github.io` with the real app, and a second worker or install would add risk for no benefit.
 - **A session done on a different day keeps its planned Day** (Monday's session done on Tuesday is logged as Day = Mon with Tuesday's date).
+- **The week strip shows the days trained, not which planned sessions are done.** Each day is judged only by what was logged on that date. That day's own planned session gets a green circle with a white tick (on plan). Any other session that date (another day's session, freestyle, or anything on a rest day) gets a white circle with a green tick (not on plan). So Wednesday's session done on Thursday ticks Thursday and leaves Wednesday as skipped. The Change session sheet and the suggested session still count it as done for Wednesday, so it is not suggested again.
+- **Every day in the Today week strip can be tapped.** Tapping a day picks that day's session to do today; it never backdates. Tapping a rest day shows "Pick a session" and "Freestyle session" rather than choosing for you. Opening the app on a rest day still suggests the nearest session not yet done. When the suggested session belongs to another day, the card says so ("Wednesday's session, logged today").
 
 ## Workout summary
 

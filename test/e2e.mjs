@@ -46,12 +46,22 @@ assert.match(await text(), /Connected/);
 
 await click('Today');
 await shot('01-start');
-await click('Change session');
+// Any day can be tapped. A rest day (Thursday in the fixture) offers a session rather than suggesting one.
+await page.click('button.weekday[aria-label="Thursday, rest day"]');
+await sleep(60);
+assert.match(await text(), /Thursday is a rest day in the plan/);
+assert.doesNotMatch(await text(), /Start session/);
+await shot('01b-rest-day');
+await click('Pick a session');
 assert.match(await text(), /Freestyle session/);
 assert.equal((await text()).match(/Not done this week/g).length, 5);
 await shot('02-change');
 await click('Gym day 1');
 assert.match(await text(), /Monday, Gym, Upper body/);
+const todayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
+const moved = todayName !== 'Monday';
+if (moved) assert.match(await text(), /Monday's session, logged today/);
+else assert.doesNotMatch(await text(), /logged today/);
 assert.match(await text(), /6 exercises, about 40 min/);
 await click('Skip warm-up');
 await click('Start session');
@@ -156,6 +166,12 @@ await click('Sync now');
 await sleep(500);
 assert.match(await text(), /Sync status: Synced/);
 await click('Done');
+
+// The strip marks the day trained, not the plan day: Monday's session done on another day leaves Monday unticked.
+const cellLabel = (day) => page.$eval(`button.weekday[aria-label^="${day},"]`, (e) => e.getAttribute('aria-label'));
+assert.equal(await cellLabel(todayName), `${todayName}, ${moved ? 'trained, not on plan' : 'partly done'}`);
+if (moved) assert.equal(await cellLabel('Monday'), 'Monday, skipped');
+await shot('07b-strip');
 
 const b = log();
 const ids = b.log.map((r) => r.ClientID);

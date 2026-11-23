@@ -47,6 +47,24 @@ test('week cells', () => {
   const cells = weekCells('2026-11-09', '2026-11-12', planDays, [done('Mon', '2026-11-09'), { ...done('Tue', '2026-11-10'), _skips: 2 }]);
   assert.deepEqual(cells.map((c) => c.state), ['done', 'partly', 'skipped', 'none', 'upcoming', 'upcoming', 'none']);
 });
+test('the week strip shows the days trained, not which planned sessions are done', () => {
+  // Wednesday's session done on Thursday ticks Thursday (off plan) and leaves Wednesday skipped.
+  let cells = weekCells('2026-11-09', '2026-11-13', planDays, [done('Wed', '2026-11-12')]);
+  assert.deepEqual(cells.map((c) => c.state), ['skipped', 'skipped', 'skipped', 'off', 'upcoming', 'upcoming', 'none']);
+  // Another day's session on a planned day, and freestyle on a planned day or a rest day, are all off plan.
+  const free = (Date) => ({ ...done('Fri', Date), Mode: 'freestyle' });
+  cells = weekCells('2026-11-09', '2026-11-16', planDays, [done('Mon', '2026-11-10'), free('2026-11-13'), free('2026-11-15')]);
+  assert.deepEqual(cells.map((c) => c.state), ['skipped', 'off', 'skipped', 'none', 'off', 'skipped', 'off']);
+  // A day's own session wins over a second, off plan one on the same date.
+  cells = weekCells('2026-11-09', '2026-11-16', planDays, [done('Mon', '2026-11-09'), done('Tue', '2026-11-09')]);
+  assert.equal(cells[0].state, 'done');
+  assert.equal(cells[1].state, 'skipped');
+});
+test('the Change session sheet still counts a moved session as done for its plan day', () => {
+  const c = candidates('2026-11-13', planDays, [done('Wed', '2026-11-12')]); // Friday, after doing Wednesday's on Thursday
+  assert.equal(c.find((x) => x.Day === 'Wed').doneThisWeek, true);
+  assert.equal(preselect(c).Day, 'Fri');
+});
 test('queued ops and csv', () => {
   const log = {}, ses = {}, lib = [];
   applyOp({ op: 'log.append', row: { ClientID: 'a', Kg: 1 } }, log, ses, lib);

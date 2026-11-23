@@ -1,18 +1,18 @@
 import { useState } from 'preact/hooks';
 import { S, useStore, view, startSession, finishStale, discardSession } from './store.js';
 import { Icon, Sheet, SyncBadge, Tag } from './ui.jsx';
-import { isoOf, candidates, preselect, describeDay, weekCells, mondayOf, niceDate, DAY_FULL, FOCUS_GRADIENT, DEFAULT_GRADIENT } from './logic.js';
+import { isoOf, dayOf, candidates, preselect, describeDay, weekCells, mondayOf, niceDate, DAY_FULL, FOCUS_GRADIENT, DEFAULT_GRADIENT } from './logic.js';
 
-const CELL_LABEL = { done: 'done', partly: 'partly done', skipped: 'skipped', upcoming: 'planned', none: 'not planned', free: 'freestyle' };
+const CELL_LABEL = { done: 'trained, on plan', off: 'trained, not on plan', partly: 'partly done', skipped: 'skipped', upcoming: 'planned', none: 'rest day' };
 
 export function WeekStrip({ cells, onPick, selected }) {
   return (
     <div class="week" role="group" aria-label="This week">
       {cells.map((c) => (
-        <button key={c.date} class={`weekday ${c.state} ${c.isToday ? 'today' : ''} ${selected === c.day ? 'sel' : ''}`} disabled={!c.planned || !onPick}
+        <button key={c.date} class={`weekday ${c.state} ${c.isToday ? 'today' : ''} ${selected === c.day ? 'sel' : ''}`} disabled={!onPick}
           onClick={() => onPick && onPick(c.day)} aria-label={`${DAY_FULL[c.day]}, ${CELL_LABEL[c.state]}`}>
           <span>{c.day[0]}</span>
-          <i>{c.state === 'done' ? <Icon name="check" size={12} /> : c.state === 'skipped' ? <Icon name="minus" size={12} /> : null}</i>
+          <i>{c.state === 'done' || c.state === 'off' ? <Icon name="check" size={12} /> : c.state === 'skipped' ? <Icon name="minus" size={12} /> : null}</i>
         </button>
       ))}
     </div>
@@ -44,7 +44,10 @@ export function Start({ go }) {
   const [sheet, setSheet] = useState(false);
   const [warm, setWarm] = useState(S.prefs.warm !== false);
   const cands = candidates(today, S.boot.planDays, v.sessions);
-  const sel = cands.find((c) => c.Day === pick) || preselect(cands);
+  // A tapped rest day selects the day itself; any other pick (or none) selects a planned session.
+  const restPick = pick && !S.boot.planDays.some((p) => p.Day === pick) ? pick : null;
+  const sel = restPick ? null : cands.find((c) => c.Day === pick) || preselect(cands);
+  const freestyle = () => { startSession(null, false); setSheet(false); go('session'); };
   const a = S.active;
   const stale = a && Date.now() - new Date(a.start).getTime() > 12 * 3600 * 1000;
   const d = sel && describeDay(sel, S.boot.plan);
@@ -56,7 +59,7 @@ export function Start({ go }) {
         <SyncBadge />
       </header>
       {S.boot.planDays.length > 0 && (
-        <WeekStrip cells={weekCells(mondayOf(today), today, S.boot.planDays, v.sessions)} onPick={a ? null : setPick} selected={!a && sel ? sel.Day : null} />
+        <WeekStrip cells={weekCells(mondayOf(today), today, S.boot.planDays, v.sessions)} onPick={a ? null : setPick} selected={a ? null : restPick || (sel && sel.Day)} />
       )}
 
       {!S.settings.url ? (
@@ -81,15 +84,23 @@ export function Start({ go }) {
           <p class="muted">{a.items.filter((i) => i.sets.length || i.skipped).length} of {a.items.length} exercises started</p>
           <button class="btn big" onClick={() => go('session')}>Resume</button>
         </section>
+      ) : restPick ? (
+        <section class="card">
+          <h2>{DAY_FULL[restPick]} is a rest day in the plan</h2>
+          <p class="muted">Pick any planned session to do today, or build your own.</p>
+          <button class="btn big" onClick={() => setSheet(true)}>Pick a session</button>
+          <button class="btn ghost" onClick={freestyle}>Freestyle session</button>
+        </section>
       ) : !sel ? (
         <section class="card">
           <h2>No plan loaded yet</h2>
           <p class="muted">Open the app once with signal so it can fetch your plan, or start a freestyle session.</p>
-          <button class="btn" onClick={() => { startSession(null, false); go('session'); }}>Freestyle session</button>
+          <button class="btn" onClick={freestyle}>Freestyle session</button>
         </section>
       ) : (
         <section class="card hero">
           <DayCard c={sel} plan={S.boot.plan} />
+          {sel.Day !== dayOf(today) && <p class="small movednote">{DAY_FULL[sel.Day]}'s session, logged today</p>}
           {d.warm > 0 && (
             <div class="row between warm">
               <span>{warm ? `Warm-up first (${d.warm} exercises)` : 'Warm-up skipped'}</span>
@@ -105,7 +116,7 @@ export function Start({ go }) {
         <Sheet title="Change session" onClose={() => setSheet(false)} tall>
           <div class="stack">
             {cands.map((c) => <DayCard key={c.Day} c={c} plan={S.boot.plan} compact onClick={() => { setPick(c.Day); setSheet(false); }} />)}
-            <button class="card pick" onClick={() => { startSession(null, false); setSheet(false); go('session'); }}>
+            <button class="card pick" onClick={freestyle}>
               <h2>Freestyle session</h2><p class="muted">Build from scratch.</p>
             </button>
           </div>
