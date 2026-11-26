@@ -169,10 +169,42 @@ export function fixtureBook() {
   ]);
 }
 
+// A stand-in for Groq's chat API: an invented, deterministic session built from the request and the library list in
+// the prompt. It never touches the network. Each call moves along the list, so "Ask again" gives something different.
+const EXTRA = { Legs: 'Goblet squat', Glutes: 'Cable kickback', Chest: 'Cable fly', Back: 'Single arm cable row', Shoulders: 'Arnold press', Arms: 'Rope pushdown', Core: 'Dead bug', Other: 'Farmer carry' };
+export function fakeGroq() {
+  let calls = 0;
+  const reply = (code, body) => ({ getResponseCode: () => code, getContentText: () => JSON.stringify(body) });
+  const handler = (url, opts) => {
+    handler.requests.push({ url, opts });
+    const body = JSON.parse(opts.payload);
+    const user = body.messages[body.messages.length - 1].content;
+    const ask = (user.match(/^Request: (.*)$/m) || [])[1] || '';
+    const lib = [...user.matchAll(/^- (.+) \| (\w+)$/gm)].map((m) => ({ name: m[1], group: m[2] }));
+    const q = ask.toLowerCase();
+    if (/server error/.test(q)) return reply(500, { error: { message: 'Invented failure' } });
+    const groups = /leg|lower/.test(q) ? ['Legs', 'Glutes'] : /upper|chest|arm|back|shoulder|push|pull/.test(q) ? ['Chest', 'Back', 'Shoulders', 'Arms'] : /core|abs/.test(q) ? ['Core'] : null;
+    const pool = lib.filter((l) => !groups || groups.includes(l.group));
+    const mins = Number((q.match(/(\d+)\s*min/) || [])[1]) || 45;
+    const n = Math.max(2, Math.min(6, Math.round(mins / 9)));
+    const start = calls++;
+    const picked = pool.length ? Array.from({ length: Math.min(n - 1, pool.length) }, (_, i) => pool[(start + i) % pool.length]) : [];
+    const extra = (groups || ['Other'])[start % (groups || ['Other']).length];
+    const exercises = [...picked.map((l) => ({ exercise: l.name.toLowerCase(), group: l.group })), { exercise: EXTRA[extra], group: extra }]
+      .map((x, i) => ({ ...x, sets: 3, reps: i ? '10-12' : '8-10', rest: i ? '60s' : '90s', cue: i ? '' : 'Steady and controlled' }));
+    const name = groups ? `${groups[0] === 'Legs' ? 'Lower' : groups[0] === 'Core' ? 'Core' : 'Upper'} body, ${mins} min` : `Full body, ${mins} min`;
+    return reply(200, { choices: [{ message: { role: 'assistant', content: JSON.stringify({ name, exercises }) } }] });
+  };
+  handler.requests = [];
+  return handler;
+}
+
 // The Apps Script services Code.gs uses, backed by the mock book. props holds the script properties.
-export function gasGlobals(book, props, { uuid, logs = [] } = {}) {
+// fetch stands in for UrlFetchApp.fetch; by default an invented Groq.
+export function gasGlobals(book, props, { uuid, logs = [], fetch = fakeGroq() } = {}) {
   const pad = (n) => String(n).padStart(2, '0');
   return {
+    UrlFetchApp: { fetch },
     SpreadsheetApp: { openById: () => book },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
     Session: { getScriptTimeZone: () => 'UTC' },

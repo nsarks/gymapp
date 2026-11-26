@@ -32,6 +32,12 @@ const DATE_COLS = { Log: 'D:D', Sessions: 'B:B' };
 const NUMBER_FIELDS = { Log: { SetNo: 1, Kg: 1, Reps: 1, RPE: 1 }, AppPlan: { Order: 1 } };
 const DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DAY_NAMES = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' };
+const GROUPS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Glutes', 'Core', 'Other'];
+
+// Suggest a session (optional). Set GROQ_API_KEY, and GROQ_MODEL if wanted, in Project Settings, Script Properties.
+// Only the request text and the Library's exercise names and groups are sent. Never history, weights or notes.
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODELS = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b']; // the first is the default, the second the fallback
 
 /* ---------- entry points ---------- */
 
@@ -53,6 +59,7 @@ function doPost(e) {
     try {
       if (req.action === 'bootstrap') out = bootstrap_();
       else if (req.action === 'sync') out = sync_(Array.isArray(req.ops) ? req.ops : []);
+      else if (req.action === 'suggest') out = suggest_(req.text);
       else out = { ok: false, error: 'Unknown action' };
     } catch (err) {
       out = { ok: false, error: 'Server error: ' + (err && err.message ? err.message : 'unknown') };
@@ -198,7 +205,7 @@ function bootstrap_() {
   return {
     ok: true, today: today, plan: plan, planDays: planDays, library: library,
     weekStatus: weekStatus, lastPerformance: lastPerformance, recentSessions: recentSessions,
-    sessions: sessions, log: log,
+    sessions: sessions, log: log, suggest: !!groqKey_(),
   };
 }
 
@@ -266,6 +273,149 @@ function applyKeyed_(ss, name, keyField, ops, kinds, applied) {
   Object.keys(deletes).map(Number).sort(function (a, b) { return b - a; }).forEach(function (r) {
     sheet.deleteRow(r);
   });
+}
+
+/* ---------- suggest a session ---------- */
+
+function groqKey_() {
+  return clean_(PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY'));
+}
+
+// Asks Groq for one session from a short request. Nothing is written: new exercises reach Library
+// through sync only when the session is started, so asking again does not fill the library.
+function suggest_(text) {
+  const key = groqKey_();
+  if (!key) return { ok: false, error: 'Suggestions are not set up. Add GROQ_API_KEY in Script Properties.' };
+  const ask = clean_(text).slice(0, 300);
+  if (!ask) return { ok: false, error: 'Say what you would like to do.' };
+  const seen = {};
+  const lib = [];
+  readRows_(book_(), 'Library').forEach(function (l) {
+    const name = clean_(l.Exercise).slice(0, 80);
+    const k = name && nameKey_(name);
+    if (!k || seen[k]) return;
+    seen[k] = true;
+    lib.push({ name: name, group: GROUPS.indexOf(l.Group) >= 0 ? l.Group : 'Other' });
+  });
+  const reply = askGroq_(key, ask, lib.slice(0, 400));
+  if (!reply.ok) return reply;
+  const session = tidySuggestion_(reply.data, lib);
+  if (!session.exercises.length) return { ok: false, error: 'No session came back. Try again, or word it differently.' };
+  return { ok: true, session: session };
+}
+
+const SUGGEST_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['name', 'exercises'],
+  properties: {
+    name: { type: 'string' },
+    exercises: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false, required: ['exercise', 'group', 'sets', 'reps', 'rest', 'cue'],
+        properties: {
+          exercise: { type: 'string' }, group: { type: 'string', enum: GROUPS }, sets: { type: 'integer' },
+          reps: { type: 'string' }, rest: { type: 'string' }, cue: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+const SUGGEST_RULES = [
+  'You plan one gym session for one person, from their short request. Reply only with JSON that matches the schema.',
+  'Use exercises from the library list, with the name written exactly as in the list, whenever one fits.',
+  'Only include an exercise that is not in the list when nothing in the list fits the request. Give it a short, plain name and its muscle group.',
+  'Fit the session to the time asked for, allowing about 2 to 3 minutes per set including rest. If no time is given, aim for about 45 minutes.',
+  'Use 2 to 8 exercises. Sets: a whole number from 1 to 6. Reps: a number or a range such as "8-10", or a time for holds such as "30s". Rest: a time such as "60s" or "2min".',
+  'Respect anything the request says to avoid or go easy on.',
+  'Do not mention weights: the app fills them in.',
+  'name: a short title for the session, at most 40 characters. cue: one short coaching tip, or an empty string.',
+  'Write in British English, with no emojis and no dashes used as punctuation.',
+].join('\n');
+
+function groqBody_(model, ask, lib) {
+  const list = lib.map(function (l) { return '- ' + l.name + ' | ' + l.group; }).join('\n');
+  return {
+    model: model,
+    messages: [
+      { role: 'system', content: SUGGEST_RULES },
+      { role: 'user', content: 'Request: ' + ask + '\n\nLibrary (name | muscle group):\n' + (list || '(empty)') },
+    ],
+    response_format: { type: 'json_schema', json_schema: { name: 'gym_session', strict: true, schema: SUGGEST_SCHEMA } },
+    reasoning_effort: 'low',
+  };
+}
+
+// Tries the chosen model, then the fallback once. A refused key or a rate limit stops at once.
+function askGroq_(key, ask, lib) {
+  const chosen = clean_(PropertiesService.getScriptProperties().getProperty('GROQ_MODEL')) || GROQ_MODELS[0];
+  const models = [chosen].concat(GROQ_MODELS.filter(function (m) { return m !== chosen; })).slice(0, 2);
+  for (let i = 0; i < models.length; i++) {
+    let res;
+    try {
+      res = UrlFetchApp.fetch(GROQ_URL, {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        headers: { Authorization: 'Bearer ' + key },
+        payload: JSON.stringify(groqBody_(models[i], ask, lib)),
+      });
+    } catch (err) {
+      const msg = err && err.message ? err.message : '';
+      return { ok: false, error: /permission|authori/i.test(msg)
+        ? 'The script is not allowed to reach the suggestion service yet. Run checkSuggest once in the Apps Script editor.'
+        : 'Could not reach the suggestion service. Try again.' };
+    }
+    const code = res.getResponseCode();
+    if (code === 401 || code === 403) return { ok: false, error: 'The suggestion service did not accept the Groq key. Check GROQ_API_KEY in Script Properties.' };
+    if (code === 429) return { ok: false, error: 'The suggestion service is busy. Try again in a minute.' };
+    if (code >= 200 && code < 300) {
+      const data = readGroqReply_(res.getContentText());
+      if (data) return { ok: true, data: data };
+    }
+  }
+  return { ok: false, error: 'Could not get a suggestion. Try again.' };
+}
+
+function readGroqReply_(text) {
+  try {
+    const data = JSON.parse(JSON.parse(text).choices[0].message.content);
+    return data && Array.isArray(data.exercises) ? data : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Library names win over the model's spelling, so history and weights line up.
+function tidySuggestion_(data, lib) {
+  const byKey = {};
+  lib.forEach(function (l) { byKey[nameKey_(l.name)] = l; });
+  const seen = {};
+  const out = [];
+  data.exercises.forEach(function (x) {
+    if (!x || out.length >= 10) return;
+    const name = clean_(x.exercise).slice(0, 60);
+    const k = name && nameKey_(name);
+    if (!k || seen[k]) return;
+    seen[k] = true;
+    const hit = byKey[k];
+    const sets = Math.round(Number(x.sets));
+    out.push({
+      exercise: hit ? hit.name : name,
+      group: hit ? hit.group : (GROUPS.indexOf(x.group) >= 0 ? x.group : 'Other'),
+      isNew: !hit,
+      sets: isFinite(sets) ? Math.max(1, Math.min(6, sets)) : 3,
+      reps: clean_(x.reps).slice(0, 20) || '10',
+      rest: clean_(x.rest).slice(0, 20) || '60s',
+      cue: clean_(x.cue).slice(0, 160),
+    });
+  });
+  return { name: clean_(data.name).slice(0, 40) || 'Suggested session', exercises: out };
+}
+
+// Run by hand once after adding GROQ_API_KEY. It asks for the permission to reach Groq and tries one request.
+function checkSuggest() {
+  if (!groqKey_()) { Logger.log('No GROQ_API_KEY in Script Properties yet.'); return; }
+  const res = suggest_('Upper body, about 20 minutes');
+  Logger.log(res.ok ? 'Suggestions work. Got "' + res.session.name + '": ' + res.session.exercises.map(function (x) { return x.exercise; }).join(', ') : 'Suggestion failed: ' + res.error);
 }
 
 /* ---------- setup (run once by hand) ---------- */

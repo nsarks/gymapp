@@ -145,3 +145,111 @@ test('the guard refuses any tab that is not an app tab', () => {
   assert.throws(() => g.api.appSheet_(g.book, 'PLAN'), /Refusing/);
   assert.throws(() => g.api.appSheet_(g.book, 'Plan'), /Refusing/);
 });
+
+const suggestSetup = (fetch) => {
+  const book = fixtureBook();
+  const before = snapshot(book);
+  const g = loadScript(book, fetch ? { fetch } : {});
+  g.api.setup();
+  return { ...g, key: g.props.KEY, before };
+};
+const groqReply = (code, content) => ({ getResponseCode: () => code, getContentText: () => JSON.stringify(code === 200 ? { choices: [{ message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }] } : { error: { message: 'x' } }) });
+
+test('suggest is hidden and refused until a Groq key is set', () => {
+  const g = suggestSetup();
+  assert.equal(g.post({ key: g.key, action: 'bootstrap' }).suggest, false);
+  const res = g.post({ key: g.key, action: 'suggest', text: 'legs' });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /not set up/);
+  g.props.GROQ_API_KEY = 'k';
+  assert.equal(g.post({ key: g.key, action: 'bootstrap' }).suggest, true);
+  assert.deepEqual(g.post({ key: 'wrong', action: 'suggest', text: 'legs' }), { ok: false, error: 'Request refused' });
+});
+
+test('suggest sends only the request and library names, and writes nothing', () => {
+  const calls = [];
+  const g = suggestSetup((url, opts) => {
+    calls.push({ url, opts });
+    return groqReply(200, { name: 'Legs, 30 min', exercises: [
+      { exercise: 'bulgarian ss', group: 'Chest', sets: 9, reps: '8-10', rest: '90s', cue: 'Tall chest' },
+      { exercise: 'Goblet squat', group: 'Legs', sets: 3, reps: '10', rest: '60s', cue: '' },
+      { exercise: 'Goblet  Squat', group: 'Legs', sets: 3, reps: '10', rest: '60s', cue: '' },
+      { exercise: 'Odd one', group: 'Nonsense', sets: 'x', reps: '', rest: '', cue: '' },
+    ] });
+  });
+  g.props.GROQ_API_KEY = 'secret-groq';
+  g.post({ key: g.key, action: 'sync', ops: [set('a1', { Note: 'private note', Kg: 99 }), { id: 's', op: 'session.upsert', row: { SessionID: 's1', Date: '2026-11-16', Day: 'Mon', Mode: 'as planned', Injury: true, Note: 'Knee: invented niggle', Start: 'x', End: 'y' } }] });
+  const rows = JSON.stringify(g.book.sheets.map((s) => s.grid));
+  const res = g.post({ key: g.key, action: 'suggest', text: '  Legs,   about 30 minutes ' });
+  assert.equal(res.ok, true);
+  assert.equal(JSON.stringify(g.book.sheets.map((s) => s.grid)), rows, 'suggest writes nothing');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.groq.com/openai/v1/chat/completions');
+  assert.equal(calls[0].opts.headers.Authorization, 'Bearer secret-groq');
+  const body = JSON.parse(calls[0].opts.payload);
+  assert.equal(body.model, 'openai/gpt-oss-20b');
+  assert.equal(body.response_format.json_schema.strict, true);
+  const sent = JSON.stringify(body.messages);
+  assert.match(sent, /Request: Legs, about 30 minutes/);
+  assert.match(sent, /- Bulgarian SS \| Legs/);
+  assert.match(sent, /- DB Bench Press \| Chest/);
+  for (const s of ['private note', 'invented niggle', '99', g.key, '2026-11-16', 'SLOW AND CONTROLLED', 'Hold']) assert.ok(!sent.includes(s), `sent "${s}"`);
+  assert.equal(res.session.name, 'Legs, 30 min');
+  assert.deepEqual(res.session.exercises, [
+    { exercise: 'Bulgarian SS', group: 'Legs', isNew: false, sets: 6, reps: '8-10', rest: '90s', cue: 'Tall chest' },
+    { exercise: 'Goblet squat', group: 'Legs', isNew: true, sets: 3, reps: '10', rest: '60s', cue: '' },
+    { exercise: 'Odd one', group: 'Other', isNew: true, sets: 3, reps: '10', rest: '60s', cue: '' },
+  ]);
+  assert.equal(snapshot(g.book), g.before);
+});
+
+test('suggest falls back to the second model once, and stops on a refused key or rate limit', () => {
+  const tryWith = (codes, extra = {}) => {
+    const models = [];
+    const g = suggestSetup((url, opts) => {
+      models.push(JSON.parse(opts.payload).model);
+      const c = codes[models.length - 1];
+      return c === 'bad' ? groqReply(200, 'not json') : groqReply(c, { name: 'A', exercises: [{ exercise: 'Plank', group: 'Core', sets: 2, reps: '30s', rest: '30s', cue: '' }] });
+    });
+    Object.assign(g.props, { GROQ_API_KEY: 'k' }, extra);
+    return { res: g.post({ key: g.key, action: 'suggest', text: 'core' }), models };
+  };
+  let t = tryWith([500, 200]);
+  assert.equal(t.res.ok, true);
+  assert.deepEqual(t.models, ['openai/gpt-oss-20b', 'openai/gpt-oss-120b']);
+  t = tryWith(['bad', 'bad']);
+  assert.deepEqual(t.res, { ok: false, error: 'Could not get a suggestion. Try again.' });
+  t = tryWith([401]);
+  assert.match(t.res.error, /did not accept the Groq key/);
+  assert.equal(t.models.length, 1);
+  t = tryWith([429]);
+  assert.match(t.res.error, /busy/);
+  t = tryWith([200], { GROQ_MODEL: 'openai/gpt-oss-120b' });
+  assert.deepEqual(t.models, ['openai/gpt-oss-120b']);
+  assert.match(suggestSetup().post({ key: 'x', action: 'suggest' }).error, /refused/);
+});
+
+test('suggest copes with a blank request, an empty reply and no permission to fetch', () => {
+  let g = suggestSetup(() => groqReply(200, { name: '', exercises: [] }));
+  g.props.GROQ_API_KEY = 'k';
+  assert.match(g.post({ key: g.key, action: 'suggest', text: '   ' }).error, /Say what/);
+  assert.match(g.post({ key: g.key, action: 'suggest', text: 'legs' }).error, /No session came back/);
+  g = suggestSetup(() => { throw new Error('You do not have permission to call UrlFetchApp.fetch'); });
+  g.props.GROQ_API_KEY = 'k';
+  assert.match(g.post({ key: g.key, action: 'suggest', text: 'legs' }).error, /Run checkSuggest/);
+  g.api.checkSuggest();
+  assert.match(g.logs[g.logs.length - 1], /Suggestion failed: .*checkSuggest/);
+});
+
+test('the invented Groq used by the test site suggests from the library', () => {
+  const g = suggestSetup();
+  g.props.GROQ_API_KEY = 'k';
+  const a = g.post({ key: g.key, action: 'suggest', text: 'legs, 30 minutes' });
+  assert.equal(a.ok, true);
+  assert.ok(a.session.exercises.some((x) => !x.isNew && x.group === 'Legs'));
+  assert.ok(a.session.exercises.some((x) => x.isNew));
+  const b = g.post({ key: g.key, action: 'suggest', text: 'legs, 30 minutes' });
+  assert.notDeepEqual(a.session.exercises, b.session.exercises, 'asking again gives something different');
+  g.api.checkSuggest();
+  assert.match(g.logs[g.logs.length - 1], /^Suggestions work/);
+});

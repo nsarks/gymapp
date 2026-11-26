@@ -8,6 +8,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 export function start(port = 0) {
   const g = loadScript(fixtureBook());
   g.api.setup();
+  g.props.GROQ_API_KEY = 'test-only'; // the mock's invented Groq answers; nothing leaves the machine
   const key = g.logs.find((l) => /SECRET KEY/.test(l)).split(': ')[1];
   const dist = new URL('../dist/', import.meta.url).pathname;
   const distPreview = new URL('../dist-preview/', import.meta.url).pathname;

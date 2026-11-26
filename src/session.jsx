@@ -180,7 +180,7 @@ function ExerciseCard({ it, index, count }) {
         <div class="details">
           {it.tempo && <p><span class="muted">Tempo</span> {it.tempo}</p>}
           {it.rest && <p><span class="muted">Rest</span> {it.rest}</p>}
-          {it.cue && <p><span class="muted">Note from the sheet</span> {it.cue}</p>}
+          {it.cue && <p><span class="muted">{it.suggested ? 'Suggested tip' : 'Note from the sheet'}</span> {it.cue}</p>}
           <p><span class="muted">Last time</span> {last ? `${last.sets.map(fmtSet).join(', ')} (${niceDate(last.date)})` : 'No record yet'}</p>
           {it.note && <p><span class="muted">Your note</span> {it.note}</p>}
         </div>
