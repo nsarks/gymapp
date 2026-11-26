@@ -74,6 +74,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outl
 .tag-done { color: var(--accent-dark); background: #DCFCE7; } .tag-skipped { color: #4B5563; background: #E5E7EB; } .tag-swapped { color: var(--amber); background: #FEF3C7; } .tag-added { color: var(--blue); background: #DBEAFE; } .tag-injury { color: var(--red); background: #FEE2E2; }
 
 .text { width: 100%; min-height: 52px; padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); color: var(--text); font-size: 16px; }
+textarea.text.area { min-height: 96px; padding: 12px 14px; resize: vertical; font: inherit; line-height: 1.4; }
+.sugglist { display: flex; flex-direction: column; gap: 8px; }
+.suggrow { padding: 10px 12px 10px 16px; border-radius: 12px; background: var(--surface2); border-left: 6px solid var(--g); display: flex; flex-direction: column; gap: 2px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 650; }
 .notebox { background: var(--surface2); border-radius: 12px; padding: 10px 12px; }
 

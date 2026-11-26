@@ -6,6 +6,8 @@ import { seedOps } from './seed.js';
 import { isoOf, uuid } from '../logic.js';
 
 const STATE = 'testSheet';
+// Turns on "Suggest a session". Not a real key: the fake Groq in sheet.js answers, and nothing leaves the page.
+const TEST_PROPS = { GROQ_API_KEY: 'test-site-only' };
 let ready = null;
 
 function run(book, props) {
@@ -24,10 +26,10 @@ function post(f, body) {
 async function open(store) {
   const saved = await store.get(STATE);
   if (saved) {
-    const book = loadBook(saved.book), props = saved.props;
+    const book = loadBook(saved.book), props = { ...saved.props, ...TEST_PROPS };
     return { api: run(book, props), book, props };
   }
-  const book = fixtureBook(), props = {};
+  const book = fixtureBook(), props = { ...TEST_PROPS };
   const f = { api: run(book, props), book, props };
   f.api.setup();
   const boot = post(f, { action: 'bootstrap' });

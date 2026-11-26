@@ -51,6 +51,10 @@ await page.click('button.weekday[aria-label="Thursday, rest day"]');
 await sleep(60);
 assert.match(await text(), /Thursday is a rest day in the plan/);
 assert.doesNotMatch(await text(), /Start session/);
+// Suggest a session is offered on a rest day too, and opens straight away.
+await click('Suggest a session');
+assert.match(await text(), /What would you like to do\?/);
+await click('Close');
 await shot('01b-rest-day');
 await click('Pick a session');
 assert.match(await text(), /Freestyle session/);
@@ -283,6 +287,56 @@ await click('Log set 1');
 await click('Finish session');
 await click('Done');
 
+// Suggest a session. The test scripts the Groq stand-in's replies.
+const groq = (code, content) => () => ({ getResponseCode: () => code, getContentText: () => JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }) });
+g.groq = groq(500, {});
+await click('Today');
+await click('Change session');
+await click('Suggest a session');
+assert.match(await text(), /heaviest set last time/);
+await page.type('.overlay textarea', 'Chest, 20 minutes');
+await click('Suggest');
+await sleep(400);
+assert.match(await text(), /Could not get a suggestion\. Try again\./);
+g.groq = groq(200, { name: 'Chest in 20', exercises: [
+  { exercise: 'barbell bench press', group: 'Chest', sets: 3, reps: '8-10', rest: '90s', kg: 40, cue: 'Feet flat on the floor' },
+  { exercise: 'Cable fly', group: 'Chest', sets: 2, reps: '12', rest: '60s', kg: 15, cue: '' },
+] });
+await click('Try again');
+await sleep(400);
+const sent = JSON.stringify(g.groqRequests[g.groqRequests.length - 1].messages);
+assert.match(sent, /Request: Chest, 20 minutes/);
+assert.match(sent, /- Barbell bench press \| Chest \| last time 25 kg x 10/);
+assert.ok(!sent.includes(key) && !/Knee|Cycled in/.test(sent.replace(/Knee to wall ankle rocks/g, '')), 'no key, injury or notes sent');
+assert.match(await text(), /Chest in 20/);
+assert.match(await text(), /Barbell bench press[\s\S]*3 x 8-10, rest 90s[\s\S]*Last time: 25 kg x 10/);
+assert.match(await text(), /Cable fly[\s\S]*New[\s\S]*Suggested start: 15 kg[\s\S]*Added to your library when you start/);
+await shot('16-suggest');
+await click('Start session');
+assert.match(await text(), /Chest in 20/);
+assert.match(await text(), /3 x 8-10/);
+assert.match(await text(), /25kg/); // history wins over the suggested 40 kg
+await click('Cue and last time');
+assert.match(await text(), /Suggested tip\s+Feet flat on the floor/i);
+assert.doesNotMatch(await text(), /Suggested start/i);
+await click('2. Cable fly, to do');
+assert.match(await text(), /15kg/); // never done: the suggested weight
+await click('Cue and last time');
+assert.match(await text(), /No record yet\s*Suggested start\s+15 kg, a guess from similar exercises/i);
+await click('Log set 1');
+await click('Session menu');
+await click('Finish session');
+await click('Leave them');
+await click('Done');
+await click('Settings');
+await click('Force sync');
+await sleep(600);
+const sg = log();
+assert.ok(sg.library.some((l) => l.Exercise === 'Cable fly' && l.Group === 'Chest'), 'new exercise added on start');
+const fly = sg.log.filter((r) => r.Exercise === 'Cable fly');
+assert.deepEqual(fly.map((r) => [r.Kg, r.Reps, r.Status]), [[15, 12, 'done']]);
+assert.equal(sg.sessions.find((x) => x.SessionID === fly[0].SessionID).Mode, 'freestyle');
+
 // Chart needs two or more sessions. Add two older ones straight into the sheet, then refresh.
 const old = (id, s, date, kg) => ({ id, op: 'log.append', row: { ClientID: id, LoggedAt: date + 'T10:00:00Z', SessionID: s, Date: date, Day: 'Mon', Exercise: 'Barbell bench press', PlannedExercise: '', Status: 'done', SetNo: 1, Kg: kg, Reps: 10, RPE: '', Note: '' } });
 g.post({ key, action: 'sync', ops: [old('h1', 'old1', '2026-10-05', 20), old('h2', 'old2', '2026-11-02', 22.5)] });
@@ -325,11 +379,12 @@ assert.doesNotMatch(await text(), /Finish yesterday/);
 await page.setOfflineMode(false);
 await click('Settings');
 await click('Force sync');
-await sleep(600);
+// The discard may still be in the sync backoff from the offline spell, so wait for it rather than a fixed time.
+for (let i = 0; i < 25 && log().sessions.some((x) => !x.End); i++) { await sleep(200); if (i === 10) await click('Force sync'); }
 const end = log();
 assert.equal(end.log.filter((r) => r.Note === 'Cycled in').length, 3);
-assert.equal(end.sessions.length, 3);
-assert.equal(end.sessions.filter((x) => x.Mode === 'freestyle').length, 1);
+assert.equal(end.sessions.length, 4, JSON.stringify(end.sessions.map((s) => [s.SessionID.slice(0, 6), s.Mode, s.Day, s.Start, s.End, s.Note])));
+assert.equal(end.sessions.filter((x) => x.Mode === 'freestyle').length, 2);
 assert.ok(!end.sessions.some((x) => !x.End), 'discarded session is gone');
 assert.equal(end.log.filter((r) => r.Exercise === 'Barbell bench press' && r.Status === 'swapped' && r.PlannedExercise === 'DB Bench Press').length, 3);
 assert.match(end.sessions.find((x) => x.Mode === 'modified').Note, /^Warm-up done \| Knee/);
