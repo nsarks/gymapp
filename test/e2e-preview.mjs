@@ -118,6 +118,29 @@ await t.click('History');
 await sleep(300);
 assert.equal(await t.$$eval('.card.pick', (c) => c.length), sessionCount + 1);
 
+// Suggest a session works in the test site, from the invented Groq inside the page.
+await t.click('Today');
+await t.click('Change session');
+await t.click('Suggest a session');
+await t.click('Legs, about 30 minutes');
+await t.click('Suggest');
+await sleep(500);
+assert.match(await t.text(), /Lower body, 30 min/);
+assert.match(await t.text(), /Last time: /);
+assert.match(await t.text(), /New/);
+await t.click('Ask again');
+await sleep(500);
+assert.match(await t.text(), /Lower body, 30 min/);
+await t.click('Start session');
+await t.click('Log set 1');
+await t.click('Session menu');
+await t.click('Finish session');
+await t.click('Leave them');
+await t.click('Done');
+await sleep(500);
+await t.click('History');
+assert.equal(await t.$$eval('.card.pick', (c) => c.length), sessionCount + 2);
+
 assert.deepEqual(t.posts, [], 'the test site sent no requests');
 assert.equal(g.posts.length, apiPosts, 'the real backend heard nothing from the test site');
 assert.deepEqual(await t.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map((r) => new URL(r.scope).pathname)), ['/'], 'only the real worker');

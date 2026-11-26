@@ -174,7 +174,7 @@ export async function bootstrap() {
   if (!S.settings.url) return false;
   try {
     const b = await api({ action: 'bootstrap' });
-    S.boot = { plan: b.plan, planDays: b.planDays, library: b.library };
+    S.boot = { plan: b.plan, planDays: b.planDays, library: b.library, suggest: !!b.suggest };
     S.base = { log: Object.fromEntries(b.log.map((r) => [r.ClientID, r])), sessions: Object.fromEntries(b.sessions.map((r) => [r.SessionID, r])) };
     S.sync = { state: 'ok', error: '', last: Date.now() };
     save('boot', 'base');
@@ -295,7 +295,7 @@ export function defaultDraft(it) {
   const l = last && (last.sets[it.sets.length] || last.sets[last.sets.length - 1]);
   const top = maxNum(it.reps);
   return {
-    kg: prev ? prev.kg : l ? l.kg : 0,
+    kg: prev ? prev.kg : l ? l.kg : it.suggestKg || 0, // history first; a suggested session's guess only when there is none
     reps: top != null ? top : prev ? prev.reps : l ? l.reps : 10,
     rpe: '',
   };
@@ -431,6 +431,30 @@ export function addItem(name) {
   const at = s.items.length ? s.cur + 1 : 0;
   s.items.splice(at, 0, it);
   s.cur = at;
+  pushSession(); save('active'); emit();
+}
+
+/* ---------- suggest a session ---------- */
+
+// Asks the backend for a session. Online only: nothing is queued, and nothing is saved until it is started.
+export async function askSuggestion(text) {
+  if (!navigator.onLine) throw new Error('No signal. Try again when you are online, or start a freestyle session.');
+  try { return (await api({ action: 'suggest', text })).session; } catch (e) {
+    throw e.message === 'No connection' ? new Error('No connection. Try again when you have signal, or start a freestyle session.') : e;
+  }
+}
+
+// Starts a suggestion as a freestyle session, filled in. New exercises go to Library now, not when suggested.
+// Each set's weight comes from this phone's history (defaultDraft); the suggested weight is used only when there is none.
+export function startSuggested(sug) {
+  startSession(null, false);
+  const s = S.active;
+  s.name = sug.name || 'Suggested session';
+  sug.exercises.forEach((x) => addToLibrary(x.exercise, x.group, ''));
+  s.items = sug.exercises.map((x) => newItem({
+    exercise: x.exercise, target: maxNum(x.sets, 1), setsText: String(x.sets), reps: String(x.reps), rest: x.rest, cue: x.cue || '',
+    suggested: true, suggestKg: Number(x.kg) > 0 ? Number(x.kg) : 0,
+  }));
   pushSession(); save('active'); emit();
 }
 

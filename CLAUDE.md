@@ -24,7 +24,7 @@ There is one `preview` branch, shared by all features. If `preview` holds someth
 - **Test site:** runs the repo's `Code.gs` against a mock sheet inside the page (`src/preview/`). It never calls the real script. It uses its own IndexedDB (`gymlog-preview`) and no service worker; the real worker ignores `preview/`. Keep those separations: both sites share the `nsarks.github.io` origin.
 - **Backend: nothing deploys automatically.** Changing `apps-script/Code.gs` in the repo does nothing on its own. Nick (or Claude in the browser) must paste it into the Apps Script project "Gym app" at script.google.com, put the real sheet ID back in `SHEET_ID`, save, then **Deploy, Manage deployments, pencil, Version: New version, Deploy**.
 - **Never use Deploy, New deployment.** It creates a new URL and the phone app stops working until the URL is re-entered in Settings.
-- Functions run by hand from the editor (`setup`, `reseedPlan`, `resetKey`) use the saved code and need no deployment. `doPost` changes do.
+- Functions run by hand from the editor (`setup`, `reseedPlan`, `resetKey`, `checkSuggest`) use the saved code and need no deployment. `doPost` changes do.
 - When a change touches both sides, keep the app working with the old backend until the new one is deployed, or say clearly that both must go out together.
 
 ## Rules
@@ -52,11 +52,11 @@ All must pass. `test/mock-gas.mjs` is a simplified stand-in for Apps Script and 
 
 ## Map of the code
 
-- `apps-script/Code.gs`: the whole backend. `doPost` (`bootstrap`, `sync`), `setup`, `reseedPlan`, `resetKey`, seeding from Chloe's tabs, `Progress` formulas.
+- `apps-script/Code.gs`: the whole backend. `doPost` (`bootstrap`, `sync`, `suggest`), `setup`, `reseedPlan`, `resetKey`, `checkSuggest`, seeding from Chloe's tabs, `Progress` formulas. `suggest` calls Groq with `UrlFetchApp`; its key is the `GROQ_API_KEY` script property, never in the repo.
 - `src/store.js`: state, IndexedDB, the sync queue (writes go to the queue first, idempotent by `ClientID`), and every session action.
 - `src/logic.js`: pure helpers: dates, choosing the session, history sums, the workout summary text.
 - `src/start.jsx`, `session.jsx`, `history.jsx`, `settings.jsx`, `ui.jsx`, `main.jsx`: screens and shared parts. `src/style.css`: all styling.
 - `src/descriptions.js`: the short exercise descriptions, matched on a normalised name.
-- `src/preview/`: test site only (left out of the real build). `fake.js` (Code.gs in the page), `sheet.js` (the mock sheet, also used by the tests), `seed.js` (invented history).
+- `src/preview/`: test site only (left out of the real build). `fake.js` (Code.gs in the page), `sheet.js` (the mock sheet and an invented Groq, also used by the tests), `seed.js` (invented history).
 - `public/sw.js`: offline app shell cache. Bump `CACHE` when changing how it caches. It must keep ignoring `preview/`.
 - `test/`: `script.test.mjs`, `logic.test.mjs`, `summary.test.mjs`, `descriptions.test.mjs`, `preview.test.mjs`, `e2e.mjs`, `e2e-preview.mjs`; `mock-gas.mjs` and `server.mjs` support them.

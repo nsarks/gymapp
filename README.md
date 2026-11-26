@@ -65,6 +65,22 @@ It uses its own browser database (`gymlog-preview`) and registers no service wor
 
 Open the address in Chrome on Android, menu, Add to Home screen (Install app). Open it, go to Settings, paste the script URL and the key, and press Save and connect.
 
+## Suggest a session (optional)
+
+**Change session, Suggest a session** takes a short request ("legs, about 30 minutes", "upper body, go easy on the shoulders") and comes back with a full session: exercises, sets, reps, rest and a starting weight. You can start it, ask again, change the request or cancel. Once started it is a normal freestyle session.
+
+The script asks [Groq](https://groq.com) for the session, so the request leaves Google. **What is sent:** the request text, and for each exercise in `Library` its name, muscle group and heaviest set last time (kg and reps). **Not sent:** dates, notes, injury details, the session history, or Chloe's plan and comments. The Groq key stays in the script's properties; the phone never sees it.
+
+The option only appears once the script supports it and has a Groq key. To set it up:
+
+1. Get an API key at console.groq.com (API Keys, Create API key).
+2. In the Apps Script project: Project Settings (the gear on the left), Script Properties, Edit script properties, Add script property. Property `GROQ_API_KEY`, value the key. Save script properties. Leave the existing `KEY` property alone.
+3. Optional: a `GROQ_MODEL` property chooses the model. Without it the script uses `openai/gpt-oss-20b`, and tries `openai/gpt-oss-120b` once if a reply fails.
+4. Paste the new `Code.gs` in (sheet ID back in `SHEET_ID`), save, choose the function `checkSuggest` and press Run. Google asks for a new permission ("Connect to an external service"); approve it. The log should say "Suggestions work". Do this **before** deploying, so the web app is never left without the permission it needs.
+5. Deploy, Manage deployments, pencil, Version: New version, Deploy. The URL stays the same.
+
+Removing `GROQ_API_KEY` hides the option again.
+
 ## When Chloe updates the plan
 
 Each of her day tabs can hold several blocks separated by blank rows. The app uses the **last block** in each tab as the current plan, and keeps the most recent written comment for each exercise as its note. After she changes the plan, open the Apps Script project, choose `reseedPlan` and press Run. It rebuilds `AppPlan`, `PlanDays` and the plan part of `Library`; `Log`, `Sessions` and `Progress` are not touched.
@@ -98,6 +114,14 @@ The spec said to pick the simpler option and note it.
 - **The week strip shows the days trained, not which planned sessions are done.** Each day is judged only by what was logged on that date. That day's own planned session gets a green circle with a white tick (on plan). Any other session that date (another day's session, freestyle, or anything on a rest day) gets a white circle with a green tick (not on plan). So Wednesday's session done on Thursday ticks Thursday and leaves Wednesday as skipped. The Change session sheet and the suggested session still count it as done for Wednesday, so it is not suggested again.
 - **Every day in the Today week strip can be tapped.** Tapping a day picks that day's session to do today; it never backdates. Tapping a rest day shows "Pick a session" and "Freestyle session" rather than choosing for you. Opening the app on a rest day still suggests the nearest session not yet done. When the suggested session belongs to another day, the card says so ("Wednesday's session, logged today").
 
+- **Suggest a session sends weights to Groq** (issue 4). The issue first said names and groups only. Nick chose to send each library exercise's last weight too, so Groq can suggest a sensible starting weight for an exercise he has not done, from similar ones. The heaviest set last time (kg and reps) is sent, as reps say as much as kg about what the weight means. Dates, notes, injury details and history beyond that one set are not sent.
+- **For an exercise Nick has done, the phone's own history sets the weight**, set by set, as in any session. Groq's weight is used only for exercises with no history, and shows as "Suggested start" in the suggestion and in the exercise's details.
+- **A suggestion writes nothing.** New exercises are added to `Library` (with Groq's muscle group) through the normal sync when the session is started, so asking again does not fill the library. Names Groq returns are matched to the `Library` spelling, so history and weights line up.
+- **Suggest a session is in Change session only**, as the issue asked, and only when the script reports it is set up (`bootstrap` returns `suggest: true` when `GROQ_API_KEY` is set). An older script returns nothing, so the option stays hidden.
+- **The model is asked for strict JSON** (Groq's structured outputs). The script caps a suggestion at 10 exercises and 1 to 6 sets, rounds weights to 0.5 kg, and tries the fallback model once if a reply is missing or broken. A refused key or a rate limit stops at once with a plain message.
+- **The AI's coaching tip is labelled "Suggested tip"**, not "Note from the sheet", so it is never mistaken for Chloe's words.
+- **The tests and the test site use an invented Groq** (`fakeGroq` in `src/preview/sheet.js`). It builds a session from the request and the library list in the prompt and never touches the network.
+
 ## Workout summary
 
 When a session finishes, and from any finished session in History, the app offers a plain English summary with Copy and Share buttons, for pasting into Google Health or sending to Chloe. It is built on the phone from the logged sets by fixed rules (no AI service, no cost): session name and time, swaps and skips with reasons, warm-up, each exercise's sets, sets below the plan's rep target, up to three "up on last time" lines, and the session note.
@@ -108,7 +132,7 @@ When a session finishes, and from any finished session in History, the app offer
 
 ## Layout
 
-- `apps-script/Code.gs`: the whole backend.
+- `apps-script/Code.gs`: the whole backend, including the optional Groq call for Suggest a session.
 - `src/logic.js`: pure helpers (dates, picking the session, sums, the workout summary). `src/store.js`: state, IndexedDB, sync queue, session actions.
 - `src/start.jsx`, `session.jsx`, `history.jsx`, `settings.jsx`, `ui.jsx`, `main.jsx`: screens and shared parts. `src/style.css`: styling.
 - `src/descriptions.js`: short exercise descriptions.
