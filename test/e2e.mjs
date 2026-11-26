@@ -51,6 +51,10 @@ await page.click('button.weekday[aria-label="Thursday, rest day"]');
 await sleep(60);
 assert.match(await text(), /Thursday is a rest day in the plan/);
 assert.doesNotMatch(await text(), /Start session/);
+// Suggest a session is offered on a rest day too, and opens straight away.
+await click('Suggest a session');
+assert.match(await text(), /What would you like to do\?/);
+await click('Close');
 await shot('01b-rest-day');
 await click('Pick a session');
 assert.match(await text(), /Freestyle session/);

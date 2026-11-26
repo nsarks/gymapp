@@ -71,7 +71,7 @@ Open the address in Chrome on Android, menu, Add to Home screen (Install app). O
 
 The script asks [Groq](https://groq.com) for the session, so the request leaves Google. **What is sent:** the request text, and for each exercise in `Library` its name, muscle group and heaviest set last time (kg and reps). **Not sent:** dates, notes, injury details, the session history, or Chloe's plan and comments. The Groq key stays in the script's properties; the phone never sees it.
 
-The option only appears once the script supports it and has a Groq key. To set it up:
+It is also on the card shown when a rest day is tapped in the week strip. The option only appears once the script supports it and has a Groq key. To set it up:
 
 1. Get an API key at console.groq.com (API Keys, Create API key).
 2. In the Apps Script project: Project Settings (the gear on the left), Script Properties, Edit script properties, Add script property. Property `GROQ_API_KEY`, value the key. Save script properties. Leave the existing `KEY` property alone.
@@ -117,7 +117,7 @@ The spec said to pick the simpler option and note it.
 - **Suggest a session sends weights to Groq** (issue 4). The issue first said names and groups only. Nick chose to send each library exercise's last weight too, so Groq can suggest a sensible starting weight for an exercise he has not done, from similar ones. The heaviest set last time (kg and reps) is sent, as reps say as much as kg about what the weight means. Dates, notes, injury details and history beyond that one set are not sent.
 - **For an exercise Nick has done, the phone's own history sets the weight**, set by set, as in any session. Groq's weight is used only for exercises with no history, and shows as "Suggested start" in the suggestion and in the exercise's details.
 - **A suggestion writes nothing.** New exercises are added to `Library` (with Groq's muscle group) through the normal sync when the session is started, so asking again does not fill the library. Names Groq returns are matched to the `Library` spelling, so history and weights line up.
-- **Suggest a session is in Change session only**, as the issue asked, and only when the script reports it is set up (`bootstrap` returns `suggest: true` when `GROQ_API_KEY` is set). An older script returns nothing, so the option stays hidden.
+- **Suggest a session is in Change session and on the rest-day card** (added after Nick tried the test site: on a rest day it was buried at the bottom of the Change session list). It shows only when the script reports it is set up (`bootstrap` returns `suggest: true` when `GROQ_API_KEY` is set). An older script returns nothing, so the option stays hidden.
 - **The model is asked for strict JSON** (Groq's structured outputs). The script caps a suggestion at 10 exercises and 1 to 6 sets, rounds weights to 0.5 kg, and tries the fallback model once if a reply is missing or broken. A refused key or a rate limit stops at once with a plain message.
 - **The AI's coaching tip is labelled "Suggested tip"**, not "Note from the sheet", so it is never mistaken for Chloe's words.
 - **The tests and the test site use an invented Groq** (`fakeGroq` in `src/preview/sheet.js`). It builds a session from the request and the library list in the prompt and never touches the network.
