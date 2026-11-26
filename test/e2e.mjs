@@ -375,10 +375,11 @@ assert.doesNotMatch(await text(), /Finish yesterday/);
 await page.setOfflineMode(false);
 await click('Settings');
 await click('Force sync');
-await sleep(600);
+// The discard may still be in the sync backoff from the offline spell, so wait for it rather than a fixed time.
+for (let i = 0; i < 25 && log().sessions.some((x) => !x.End); i++) { await sleep(200); if (i === 10) await click('Force sync'); }
 const end = log();
 assert.equal(end.log.filter((r) => r.Note === 'Cycled in').length, 3);
-assert.equal(end.sessions.length, 4);
+assert.equal(end.sessions.length, 4, JSON.stringify(end.sessions.map((s) => [s.SessionID.slice(0, 6), s.Mode, s.Day, s.Start, s.End, s.Note])));
 assert.equal(end.sessions.filter((x) => x.Mode === 'freestyle').length, 2);
 assert.ok(!end.sessions.some((x) => !x.End), 'discarded session is gone');
 assert.equal(end.log.filter((r) => r.Exercise === 'Barbell bench press' && r.Status === 'swapped' && r.PlannedExercise === 'DB Bench Press').length, 3);
