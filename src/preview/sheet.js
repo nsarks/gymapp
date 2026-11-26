@@ -171,7 +171,7 @@ export function fixtureBook() {
 
 // A stand-in for Groq's chat API: an invented, deterministic session built from the request and the library list in
 // the prompt. It never touches the network. Each call moves along the list, so "Ask again" gives something different.
-const EXTRA = { Legs: 'Goblet squat', Glutes: 'Cable kickback', Chest: 'Cable fly', Back: 'Single arm cable row', Shoulders: 'Arnold press', Arms: 'Rope pushdown', Core: 'Dead bug', Other: 'Farmer carry' };
+const EXTRA = { Legs: 'Walking lunge', Glutes: 'Cable kickback', Chest: 'Cable fly', Back: 'Single arm cable row', Shoulders: 'Arnold press', Arms: 'Rope pushdown', Core: 'Dead bug', Other: 'Farmer carry' };
 export function fakeGroq() {
   let calls = 0;
   const reply = (code, body) => ({ getResponseCode: () => code, getContentText: () => JSON.stringify(body) });
@@ -180,7 +180,7 @@ export function fakeGroq() {
     const body = JSON.parse(opts.payload);
     const user = body.messages[body.messages.length - 1].content;
     const ask = (user.match(/^Request: (.*)$/m) || [])[1] || '';
-    const lib = [...user.matchAll(/^- (.+) \| (\w+)$/gm)].map((m) => ({ name: m[1], group: m[2] }));
+    const lib = [...user.matchAll(/^- (.+?) \| (\w+)(?: \| last time ([\d.]+) kg)?.*$/gm)].map((m) => ({ name: m[1], group: m[2], kg: m[3] ? Number(m[3]) : null }));
     const q = ask.toLowerCase();
     if (/server error/.test(q)) return reply(500, { error: { message: 'Invented failure' } });
     const groups = /leg|lower/.test(q) ? ['Legs', 'Glutes'] : /upper|chest|arm|back|shoulder|push|pull/.test(q) ? ['Chest', 'Back', 'Shoulders', 'Arms'] : /core|abs/.test(q) ? ['Core'] : null;
@@ -190,7 +190,9 @@ export function fakeGroq() {
     const start = calls++;
     const picked = pool.length ? Array.from({ length: Math.min(n - 1, pool.length) }, (_, i) => pool[(start + i) % pool.length]) : [];
     const extra = (groups || ['Other'])[start % (groups || ['Other']).length];
-    const exercises = [...picked.map((l) => ({ exercise: l.name.toLowerCase(), group: l.group })), { exercise: EXTRA[extra], group: extra }]
+    // Known weights are kept; a new exercise gets 80% of the heaviest weight seen in its group, as a light first guess.
+    const near = Math.max(0, ...lib.filter((l) => l.group === extra && l.kg).map((l) => l.kg));
+    const exercises = [...picked.map((l) => ({ exercise: l.name.toLowerCase(), group: l.group, kg: l.kg || 0 })), { exercise: EXTRA[extra], group: extra, kg: Math.round(near * 0.8) }]
       .map((x, i) => ({ ...x, sets: 3, reps: i ? '10-12' : '8-10', rest: i ? '60s' : '90s', cue: i ? '' : 'Steady and controlled' }));
     const name = groups ? `${groups[0] === 'Legs' ? 'Lower' : groups[0] === 'Core' ? 'Core' : 'Upper'} body, ${mins} min` : `Full body, ${mins} min`;
     return reply(200, { choices: [{ message: { role: 'assistant', content: JSON.stringify({ name, exercises }) } }] });

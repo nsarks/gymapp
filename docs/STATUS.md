@@ -1,6 +1,6 @@
 # Status and backlog
 
-Last updated: 24 November 2026. Update this file whenever the state below changes.
+Last updated: 26 November 2026. Update this file whenever the state below changes.
 
 ## Where things stand
 
@@ -13,6 +13,7 @@ Last updated: 24 November 2026. Update this file whenever the state below change
 - **Deployed backend version:** matches the repo's `doPost` code. The editor also has a later fix to muscle group guesses, which only affects `setup` and `reseedPlan` and needs no new deployment.
 - The phone queues writes and syncs; offline use works.
 - **Issue 1** (any day can be picked; the week strip shows days trained, on plan or not): built on branch `claude/eloquent-bardeen-4glpj8`, front end only. Tried on the test site and released to `main` on 24 November 2026.
+- **Issue 4** (Suggest a session with AI, through Groq): built on branch `claude/exciting-franklin-iq6ehi`, front end and backend. Not yet on the test site or released. The front end works with the current backend (the option stays hidden). To switch it on: `GROQ_API_KEY` in Script Properties, paste the new `Code.gs`, run `checkSuggest` and approve the new permission, then deploy a new version (README, Suggest a session). Nick chose to send each library exercise's last weight to Groq as well as its name and group.
 
 ## Next step: switch to Chloe's real sheet
 

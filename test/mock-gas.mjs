@@ -2,9 +2,9 @@
 // The mock sheet itself lives in src/preview/sheet.js, which the test site uses too.
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { fixtureBook, gasGlobals } from '../src/preview/sheet.js';
+import { fixtureBook, gasGlobals, fakeGroq } from '../src/preview/sheet.js';
 
-export { fixtureBook };
+export { fixtureBook, fakeGroq };
 
 export function loadScript(book, { fetch } = {}) {
   const props = {};

@@ -65,13 +65,13 @@ function Suggest({ onClose, onStart, onFreestyle }) {
             {EXAMPLES.map((x) => <button type="button" key={x} class="chip" onClick={() => setText(x)}>{x}</button>)}
           </div>
           <button class="btn big" disabled={!text.trim()}>Suggest</button>
-          <p class="muted small">Your request and the names of the exercises in your library go to an AI service (Groq). Nothing else is sent: no weights, history or notes.</p>
+          <p class="muted small">Your request goes to an AI service (Groq), with each library exercise's name, muscle group and heaviest set last time. No dates, notes or injury details are sent.</p>
         </form>
       )}
       {step === 'busy' && <p class="muted pad" role="status">Putting a session together...</p>}
       {step === 'failed' && (
         <div class="stack">
-          <p role="alert">Could not get a suggestion. {error}</p>
+          <p role="alert">{error}</p>
           <button class="btn" onClick={() => ask()}>Try again</button>
           <button class="btn ghost" onClick={onFreestyle}>Freestyle session</button>
         </div>
@@ -92,7 +92,8 @@ function Suggest({ onClose, onStart, onFreestyle }) {
                 <div key={x.exercise} class="suggrow" style={{ '--g': GROUP_COLOURS[group] || GROUP_COLOURS.Other }}>
                   <div class="row between"><strong>{x.exercise}</strong>{!known && <Tag kind="added" text="New" />}</div>
                   <p class="muted small">{x.sets} x {x.reps}, rest {x.rest}. {group}.</p>
-                  <p class="small">{last ? `Last time: ${fmtKg(top.kg)} kg x ${top.reps}` : known ? 'Not done before' : 'Added to your library when you start'}</p>
+                  <p class="small">{last ? `Last time: ${fmtKg(top.kg)} kg x ${top.reps}` : x.kg > 0 ? `Suggested start: ${fmtKg(x.kg)} kg` : 'Bodyweight'}</p>
+                  {!known && <p class="muted small">Added to your library when you start.</p>}
                 </div>
               );
             })}

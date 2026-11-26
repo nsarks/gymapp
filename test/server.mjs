@@ -2,11 +2,14 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fixtureBook, loadScript } from './mock-gas.mjs';
+import { fixtureBook, loadScript, fakeGroq } from './mock-gas.mjs';
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 export function start(port = 0) {
-  const g = loadScript(fixtureBook());
+  // Groq stand-in. A test can set g.groq to script its own replies; every request is kept in g.groqRequests.
+  const invented = fakeGroq();
+  const g = loadScript(fixtureBook(), { fetch: (u, o) => { g.groqRequests.push(JSON.parse(o.payload)); return (g.groq || invented)(u, o); } });
+  g.groqRequests = [];
   g.api.setup();
   g.props.GROQ_API_KEY = 'test-only'; // the mock's invented Groq answers; nothing leaves the machine
   const key = g.logs.find((l) => /SECRET KEY/.test(l)).split(': ')[1];

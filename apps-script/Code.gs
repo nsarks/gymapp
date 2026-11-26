@@ -35,7 +35,8 @@ const DAY_NAMES = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: '
 const GROUPS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Glutes', 'Core', 'Other'];
 
 // Suggest a session (optional). Set GROQ_API_KEY, and GROQ_MODEL if wanted, in Project Settings, Script Properties.
-// Only the request text and the Library's exercise names and groups are sent. Never history, weights or notes.
+// Only the request text and, for each Library exercise, its name, group and heaviest set last time are sent.
+// Never dates, notes, injury details or Chloe's plan.
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODELS = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b']; // the first is the default, the second the fallback
 
@@ -178,25 +179,7 @@ function bootstrap_() {
     return { Day: d.Day, done: !!hit, date: hit ? hit.Date : '' };
   });
 
-  // For each exercise, the sets from its most recent session.
-  const groups = {}; // exercise -> session -> { date, at, sets }
-  log.forEach(function (r) {
-    if (r.Status === 'skipped' || r.SetNo === '') return;
-    const byEx = groups[r.Exercise] || (groups[r.Exercise] = {});
-    const g = byEx[r.SessionID] || (byEx[r.SessionID] = { date: r.Date, at: '', sets: [] });
-    g.sets.push({ setNo: r.SetNo, kg: r.Kg, reps: r.Reps, rpe: r.RPE });
-    if (String(r.LoggedAt) > g.at) g.at = String(r.LoggedAt);
-  });
-  const lastPerformance = {};
-  Object.keys(groups).forEach(function (ex) {
-    let best = null;
-    Object.keys(groups[ex]).forEach(function (sid) {
-      const g = groups[ex][sid];
-      if (!best || g.date + g.at > best.date + best.at) best = g;
-    });
-    best.sets.sort(function (a, b) { return a.setNo - b.setNo; });
-    lastPerformance[ex] = { date: best.date, sets: best.sets.map(function (s) { return { kg: s.kg, reps: s.reps, rpe: s.rpe }; }) };
-  });
+  const lastPerformance = lastPerformance_(log);
 
   const recentSessions = sessions.slice().sort(function (a, b) {
     return (b.Date + b.Start).localeCompare(a.Date + a.Start);
@@ -207,6 +190,29 @@ function bootstrap_() {
     weekStatus: weekStatus, lastPerformance: lastPerformance, recentSessions: recentSessions,
     sessions: sessions, log: log, suggest: !!groqKey_(),
   };
+}
+
+// For each exercise, the sets from its most recent session.
+function lastPerformance_(log) {
+  const groups = {}; // exercise -> session -> { date, at, sets }
+  log.forEach(function (r) {
+    if (r.Status === 'skipped' || r.SetNo === '') return;
+    const byEx = groups[r.Exercise] || (groups[r.Exercise] = {});
+    const g = byEx[r.SessionID] || (byEx[r.SessionID] = { date: r.Date, at: '', sets: [] });
+    g.sets.push({ setNo: r.SetNo, kg: r.Kg, reps: r.Reps, rpe: r.RPE });
+    if (String(r.LoggedAt) > g.at) g.at = String(r.LoggedAt);
+  });
+  const out = {};
+  Object.keys(groups).forEach(function (ex) {
+    let best = null;
+    Object.keys(groups[ex]).forEach(function (sid) {
+      const g = groups[ex][sid];
+      if (!best || g.date + g.at > best.date + best.at) best = g;
+    });
+    best.sets.sort(function (a, b) { return a.setNo - b.setNo; });
+    out[ex] = { date: best.date, sets: best.sets.map(function (s) { return { kg: s.kg, reps: s.reps, rpe: s.rpe }; }) };
+  });
+  return out;
 }
 
 /* ---------- sync ---------- */
@@ -288,14 +294,26 @@ function suggest_(text) {
   if (!key) return { ok: false, error: 'Suggestions are not set up. Add GROQ_API_KEY in Script Properties.' };
   const ask = clean_(text).slice(0, 300);
   if (!ask) return { ok: false, error: 'Say what you would like to do.' };
+  const ss = book_();
+  const last = {}; // name key -> heaviest set from the latest session
+  const perf = lastPerformance_(readRows_(ss, 'Log'));
+  Object.keys(perf).forEach(function (ex) {
+    let top = null;
+    perf[ex].sets.forEach(function (x) {
+      const kg = Number(x.kg), reps = Number(x.reps);
+      if (!isFinite(kg) || !isFinite(reps)) return;
+      if (!top || kg > top.kg || (kg === top.kg && reps > top.reps)) top = { kg: kg, reps: reps };
+    });
+    if (top) last[nameKey_(ex)] = top;
+  });
   const seen = {};
   const lib = [];
-  readRows_(book_(), 'Library').forEach(function (l) {
+  readRows_(ss, 'Library').forEach(function (l) {
     const name = clean_(l.Exercise).slice(0, 80);
     const k = name && nameKey_(name);
     if (!k || seen[k]) return;
     seen[k] = true;
-    lib.push({ name: name, group: GROUPS.indexOf(l.Group) >= 0 ? l.Group : 'Other' });
+    lib.push({ name: name, group: GROUPS.indexOf(l.Group) >= 0 ? l.Group : 'Other', last: last[k] || null });
   });
   const reply = askGroq_(key, ask, lib.slice(0, 400));
   if (!reply.ok) return reply;
@@ -311,10 +329,10 @@ const SUGGEST_SCHEMA = {
     exercises: {
       type: 'array',
       items: {
-        type: 'object', additionalProperties: false, required: ['exercise', 'group', 'sets', 'reps', 'rest', 'cue'],
+        type: 'object', additionalProperties: false, required: ['exercise', 'group', 'sets', 'reps', 'rest', 'kg', 'cue'],
         properties: {
           exercise: { type: 'string' }, group: { type: 'string', enum: GROUPS }, sets: { type: 'integer' },
-          reps: { type: 'string' }, rest: { type: 'string' }, cue: { type: 'string' },
+          reps: { type: 'string' }, rest: { type: 'string' }, kg: { type: 'number' }, cue: { type: 'string' },
         },
       },
     },
@@ -328,18 +346,22 @@ const SUGGEST_RULES = [
   'Fit the session to the time asked for, allowing about 2 to 3 minutes per set including rest. If no time is given, aim for about 45 minutes.',
   'Use 2 to 8 exercises. Sets: a whole number from 1 to 6. Reps: a number or a range such as "8-10", or a time for holds such as "30s". Rest: a time such as "60s" or "2min".',
   'Respect anything the request says to avoid or go easy on.',
-  'Do not mention weights: the app fills them in.',
+  'kg: a starting weight in kilograms for every exercise. Where the list shows a weight for that exercise, use about that weight.',
+  'For an exercise with no weight in the list, estimate one from similar exercises in the list for the same muscles, erring on the light side. Use 0 for bodyweight or timed exercises.',
+  'For dumbbell exercises, kg means the weight of one dumbbell.',
   'name: a short title for the session, at most 40 characters. cue: one short coaching tip, or an empty string.',
   'Write in British English, with no emojis and no dashes used as punctuation.',
 ].join('\n');
 
 function groqBody_(model, ask, lib) {
-  const list = lib.map(function (l) { return '- ' + l.name + ' | ' + l.group; }).join('\n');
+  const list = lib.map(function (l) {
+    return '- ' + l.name + ' | ' + l.group + (l.last ? ' | last time ' + l.last.kg + ' kg x ' + l.last.reps : '');
+  }).join('\n');
   return {
     model: model,
     messages: [
       { role: 'system', content: SUGGEST_RULES },
-      { role: 'user', content: 'Request: ' + ask + '\n\nLibrary (name | muscle group):\n' + (list || '(empty)') },
+      { role: 'user', content: 'Request: ' + ask + '\n\nLibrary (name | muscle group | heaviest set last time, if done before):\n' + (list || '(empty)') },
     ],
     response_format: { type: 'json_schema', json_schema: { name: 'gym_session', strict: true, schema: SUGGEST_SCHEMA } },
     reasoning_effort: 'low',
@@ -398,6 +420,7 @@ function tidySuggestion_(data, lib) {
     seen[k] = true;
     const hit = byKey[k];
     const sets = Math.round(Number(x.sets));
+    const kg = Math.round(Number(x.kg) * 2) / 2;
     out.push({
       exercise: hit ? hit.name : name,
       group: hit ? hit.group : (GROUPS.indexOf(x.group) >= 0 ? x.group : 'Other'),
@@ -405,6 +428,7 @@ function tidySuggestion_(data, lib) {
       sets: isFinite(sets) ? Math.max(1, Math.min(6, sets)) : 3,
       reps: clean_(x.reps).slice(0, 20) || '10',
       rest: clean_(x.rest).slice(0, 20) || '60s',
+      kg: isFinite(kg) ? Math.max(0, Math.min(300, kg)) : 0,
       cue: clean_(x.cue).slice(0, 160),
     });
   });

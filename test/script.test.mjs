@@ -166,19 +166,19 @@ test('suggest is hidden and refused until a Groq key is set', () => {
   assert.deepEqual(g.post({ key: 'wrong', action: 'suggest', text: 'legs' }), { ok: false, error: 'Request refused' });
 });
 
-test('suggest sends only the request and library names, and writes nothing', () => {
+test('suggest sends only the request and library names, groups and last weights, and writes nothing', () => {
   const calls = [];
   const g = suggestSetup((url, opts) => {
     calls.push({ url, opts });
     return groqReply(200, { name: 'Legs, 30 min', exercises: [
-      { exercise: 'bulgarian ss', group: 'Chest', sets: 9, reps: '8-10', rest: '90s', cue: 'Tall chest' },
-      { exercise: 'Goblet squat', group: 'Legs', sets: 3, reps: '10', rest: '60s', cue: '' },
-      { exercise: 'Goblet  Squat', group: 'Legs', sets: 3, reps: '10', rest: '60s', cue: '' },
-      { exercise: 'Odd one', group: 'Nonsense', sets: 'x', reps: '', rest: '', cue: '' },
+      { exercise: 'bulgarian ss', group: 'Chest', sets: 9, reps: '8-10', rest: '90s', kg: 12.3, cue: 'Tall chest' },
+      { exercise: 'Goblet squat', group: 'Legs', sets: 3, reps: '10', rest: '60s', kg: 16, cue: '' },
+      { exercise: 'Goblet  Squat', group: 'Legs', sets: 3, reps: '10', rest: '60s', kg: 16, cue: '' },
+      { exercise: 'Odd one', group: 'Nonsense', sets: 'x', reps: '', rest: '', kg: -5, cue: '' },
     ] });
   });
   g.props.GROQ_API_KEY = 'secret-groq';
-  g.post({ key: g.key, action: 'sync', ops: [set('a1', { Note: 'private note', Kg: 99 }), { id: 's', op: 'session.upsert', row: { SessionID: 's1', Date: '2026-11-16', Day: 'Mon', Mode: 'as planned', Injury: true, Note: 'Knee: invented niggle', Start: 'x', End: 'y' } }] });
+  g.post({ key: g.key, action: 'sync', ops: [set('a1', { Note: 'private note', Kg: 99 }), set('a2', { SetNo: 2, Kg: 99, Reps: 12 }), set('a3', { SetNo: 3, Kg: 80, Reps: 15 }), { id: 's', op: 'session.upsert', row: { SessionID: 's1', Date: '2026-11-16', Day: 'Mon', Mode: 'as planned', Injury: true, Note: 'Knee: invented niggle', Start: 'x', End: 'y' } }] });
   const rows = JSON.stringify(g.book.sheets.map((s) => s.grid));
   const res = g.post({ key: g.key, action: 'suggest', text: '  Legs,   about 30 minutes ' });
   assert.equal(res.ok, true);
@@ -192,13 +192,14 @@ test('suggest sends only the request and library names, and writes nothing', () 
   const sent = JSON.stringify(body.messages);
   assert.match(sent, /Request: Legs, about 30 minutes/);
   assert.match(sent, /- Bulgarian SS \| Legs/);
-  assert.match(sent, /- DB Bench Press \| Chest/);
-  for (const s of ['private note', 'invented niggle', '99', g.key, '2026-11-16', 'SLOW AND CONTROLLED', 'Hold']) assert.ok(!sent.includes(s), `sent "${s}"`);
+  assert.match(sent, /- DB Bench Press \| Chest \| last time 99 kg x 12\\n/); // the heaviest set, more reps on a tie
+  assert.match(sent, /- Lat Pull down \| Back\\n/); // not done yet: no weight
+  for (const s of ['private note', 'invented niggle', g.key, '2026-11-16', 'SLOW AND CONTROLLED', 'Hold', '80 kg']) assert.ok(!sent.includes(s), `sent "${s}"`);
   assert.equal(res.session.name, 'Legs, 30 min');
   assert.deepEqual(res.session.exercises, [
-    { exercise: 'Bulgarian SS', group: 'Legs', isNew: false, sets: 6, reps: '8-10', rest: '90s', cue: 'Tall chest' },
-    { exercise: 'Goblet squat', group: 'Legs', isNew: true, sets: 3, reps: '10', rest: '60s', cue: '' },
-    { exercise: 'Odd one', group: 'Other', isNew: true, sets: 3, reps: '10', rest: '60s', cue: '' },
+    { exercise: 'Bulgarian SS', group: 'Legs', isNew: false, sets: 6, reps: '8-10', rest: '90s', kg: 12.5, cue: 'Tall chest' },
+    { exercise: 'Goblet squat', group: 'Legs', isNew: true, sets: 3, reps: '10', rest: '60s', kg: 16, cue: '' },
+    { exercise: 'Odd one', group: 'Other', isNew: true, sets: 3, reps: '10', rest: '60s', kg: 0, cue: '' },
   ]);
   assert.equal(snapshot(g.book), g.before);
 });
@@ -209,7 +210,7 @@ test('suggest falls back to the second model once, and stops on a refused key or
     const g = suggestSetup((url, opts) => {
       models.push(JSON.parse(opts.payload).model);
       const c = codes[models.length - 1];
-      return c === 'bad' ? groqReply(200, 'not json') : groqReply(c, { name: 'A', exercises: [{ exercise: 'Plank', group: 'Core', sets: 2, reps: '30s', rest: '30s', cue: '' }] });
+      return c === 'bad' ? groqReply(200, 'not json') : groqReply(c, { name: 'A', exercises: [{ exercise: 'Plank', group: 'Core', sets: 2, reps: '30s', rest: '30s', kg: 0, cue: '' }] });
     });
     Object.assign(g.props, { GROQ_API_KEY: 'k' }, extra);
     return { res: g.post({ key: g.key, action: 'suggest', text: 'core' }), models };
@@ -244,8 +245,10 @@ test('suggest copes with a blank request, an empty reply and no permission to fe
 test('the invented Groq used by the test site suggests from the library', () => {
   const g = suggestSetup();
   g.props.GROQ_API_KEY = 'k';
+  g.post({ key: g.key, action: 'sync', ops: [set('a1', { Exercise: 'Bulgarian SS', Kg: 20 })] });
   const a = g.post({ key: g.key, action: 'suggest', text: 'legs, 30 minutes' });
   assert.equal(a.ok, true);
+  assert.equal(a.session.exercises.find((x) => x.isNew).kg, 16); // Walking lunge // a light guess from the group's known weight
   assert.ok(a.session.exercises.some((x) => !x.isNew && x.group === 'Legs'));
   assert.ok(a.session.exercises.some((x) => x.isNew));
   const b = g.post({ key: g.key, action: 'suggest', text: 'legs, 30 minutes' });
