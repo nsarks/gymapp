@@ -10,11 +10,10 @@ Last updated: 26 November 2026. Update this file whenever the state below change
 - **On a phone or browser that has used the real app**, open the real app twice after the 24 November release so its service worker updates. Before that, the old worker answers `/gymapp/preview/` with a blank page; an incognito tab works either way.
 - **Backend:** Apps Script project "Gym app" at script.google.com, deployed as a web app (Execute as: Me, Who has access: Anyone). The phone app is connected to it.
 - **Sheet:** the script still points at a **test copy** of Chloe's sheet in Nick's Drive, not the real sheet. Nothing logged so far has reached Chloe's sheet.
-- **Deployed backend version:** matches the repo's `doPost` code before issue 4 (the editor holds the issue 4 code, saved but not deployed). The editor also has a later fix to muscle group guesses, which only affects `setup` and `reseedPlan` and needs no new deployment.
+- **Deployed backend version:** matches the repo's `doPost` code, issue 4 included (deployed by Nick on 26 November 2026). The editor also has a later fix to muscle group guesses, which only affects `setup` and `reseedPlan` and needs no new deployment.
 - The phone queues writes and syncs; offline use works.
 - **Issue 1** (any day can be picked; the week strip shows days trained, on plan or not): built on branch `claude/eloquent-bardeen-4glpj8`, front end only. Tried on the test site and released to `main` on 24 November 2026.
-- **Issue 4** (Suggest a session with AI, through Groq): built on branch `claude/exciting-franklin-iq6ehi`, front end and backend. Not yet on the test site or released. The front end works with the current backend (the option stays hidden). To switch it on: `GROQ_API_KEY` in Script Properties, paste the new `Code.gs`, run `checkSuggest` and approve the new permission, then deploy a new version (README, Suggest a session). Nick chose to send each library exercise's last weight to Groq as well as its name and group.
-  - 26 November: `GROQ_API_KEY` is in Script Properties, the new `Code.gs` is saved in the editor (still pointing at the test copy), and `checkSuggest` ran and returned a session with weights, so the new permission is approved. **Not yet deployed as a new version**: the phone still runs the previous backend, so the option stays hidden in the real app.
+- **Issue 4** (Suggest a session with AI, through Groq): built on branch `claude/exciting-franklin-iq6ehi`, front end and backend. Tried on the test site, which led to a Suggest a session button on the rest-day card as well. `GROQ_API_KEY` is in Script Properties, `checkSuggest` ran and the permission is approved, and Nick deployed the new backend version. Released to `main` on 26 November 2026. Groq is sent each library exercise's name, group and heaviest set last time (Nick's choice), never dates, notes or injury details. Where Suggest sits in the Change session list is to be judged in real use.
 
 ## Next step: switch to Chloe's real sheet
 
@@ -28,6 +27,7 @@ Last updated: 26 November 2026. Update this file whenever the state below change
 
 Ideas raised so far. None is agreed yet; confirm with Nick before building.
 
+- Order of Suggest a session in the Change session list (it is last): check in real use.
 - "New version ready, tap to reload" banner, so updates arrive in one open instead of two.
 - The `Progress` tab counts one dumbbell, while the app and summary count both. Align them if Chloe finds it confusing.
 - Exercise descriptions cover the current plan and about 120 common gym, mobility and cardio exercises. An exercise with no match shows none; an optional `Description` column in `Library` (needs a backend change) would let Nick or Chloe fill the gaps.
