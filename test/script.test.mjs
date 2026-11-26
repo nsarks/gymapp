@@ -254,5 +254,6 @@ test('the invented Groq used by the test site suggests from the library', () => 
   const b = g.post({ key: g.key, action: 'suggest', text: 'legs, 30 minutes' });
   assert.notDeepEqual(a.session.exercises, b.session.exercises, 'asking again gives something different');
   g.api.checkSuggest();
-  assert.match(g.logs[g.logs.length - 1], /^Suggestions work/);
+  assert.ok(g.logs.some((l) => /^Suggestions work/.test(l)));
+  assert.match(g.logs[g.logs.length - 1], /^- .+ \(\w+(, new)?\): \d x .+, rest .+, (\d+(\.5)? kg|bodyweight)/);
 });

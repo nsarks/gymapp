@@ -439,7 +439,13 @@ function tidySuggestion_(data, lib) {
 function checkSuggest() {
   if (!groqKey_()) { Logger.log('No GROQ_API_KEY in Script Properties yet.'); return; }
   const res = suggest_('Upper body, about 20 minutes');
-  Logger.log(res.ok ? 'Suggestions work. Got "' + res.session.name + '": ' + res.session.exercises.map(function (x) { return x.exercise; }).join(', ') : 'Suggestion failed: ' + res.error);
+  if (!res.ok) { Logger.log('Suggestion failed: ' + res.error); return; }
+  Logger.log('Suggestions work. Got "' + res.session.name + '":');
+  // The weight shown is Groq's. In the app, an exercise with history starts from last time instead.
+  res.session.exercises.forEach(function (x) {
+    Logger.log('- ' + x.exercise + ' (' + x.group + (x.isNew ? ', new' : '') + '): ' + x.sets + ' x ' + x.reps +
+      ', rest ' + x.rest + ', ' + (x.kg > 0 ? x.kg + ' kg' : 'bodyweight') + (x.cue ? '. Tip: ' + x.cue : ''));
+  });
 }
 
 /* ---------- setup (run once by hand) ---------- */
