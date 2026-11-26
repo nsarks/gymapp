@@ -118,9 +118,12 @@ await t.click('History');
 await sleep(300);
 assert.equal(await t.$$eval('.card.pick', (c) => c.length), sessionCount + 1);
 
-// Suggest a session works in the test site, from the invented Groq inside the page.
+// Suggest a session works in the test site, from the invented Groq inside the page. Started from a rest day here.
 await t.click('Today');
-await t.click('Change session');
+// The fixture's rest days are Thursday and Sunday; one of them is untouched whatever today is.
+assert.ok(await t.evaluate(() => { const b = [...document.querySelectorAll('button.weekday')].find((e) => /, rest day$/.test(e.getAttribute('aria-label'))); if (b) b.click(); return !!b; }), 'a rest day to tap');
+await sleep(80);
+assert.match(await t.text(), /is a rest day in the plan/);
 await t.click('Suggest a session');
 await t.click('Legs, about 30 minutes');
 await t.click('Suggest');

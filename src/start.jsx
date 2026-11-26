@@ -162,9 +162,10 @@ export function Start({ go }) {
       ) : restPick ? (
         <section class="card">
           <h2>{DAY_FULL[restPick]} is a rest day in the plan</h2>
-          <p class="muted">Pick any planned session to do today, or build your own.</p>
+          <p class="muted">{S.boot.suggest ? 'Pick any planned session to do today, build your own, or ask for a suggestion.' : 'Pick any planned session to do today, or build your own.'}</p>
           <button class="btn big" onClick={() => setSheet(true)}>Pick a session</button>
           <button class="btn ghost" onClick={freestyle}>Freestyle session</button>
+          {S.boot.suggest && <button class="btn ghost" onClick={() => setSuggest(true)}>Suggest a session</button>}
         </section>
       ) : !sel ? (
         <section class="card">
